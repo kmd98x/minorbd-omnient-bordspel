@@ -19,4 +19,6 @@ export const BONDING_CARDS: Array<string> = [
     "Noem iets waar je anders over bent gaan denken."
   ];
   
-  
+/**
+ * Laten we beginnen met de kaarten in het spel brengen, ik heb drie bestanden aangemaakt @data/bonding. * ts  @data/compliments.ts en @data/statements.ts. Ieder bestand heeft een 
+ */
