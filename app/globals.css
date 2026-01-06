@@ -5,6 +5,11 @@
   --foreground: #171717;
 }
 
+@theme {
+  --color-button: #015772;
+  --color-button-hover: #014A61;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
