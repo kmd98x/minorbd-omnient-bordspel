@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from "react";
 import { POSITIONS } from "@/data/circle-positions";
 import { useGame } from "@/contexts/GameContext";
+import Dice from "@/components/Dice";
 
 export default function Board() {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -277,33 +278,26 @@ export default function Board() {
 		setAnimationComplete(null);
 	}, [animationComplete, updatePlayerPosition, setCurrentPlayerIndex, players]);
 
-	// Roll dice function
-	const handleDiceRoll = () => {
-		if (!isCurrentPlayerTurn || !currentPlayer) return;
+	// Roll dice function - called when dice finishes rolling
+	const handleDiceRoll = (rolledValue: number) => {
+		if (!currentPlayer) return;
 
+		setDiceValue(rolledValue);
+		setIsRolling(false);
+
+		// Start animation for current player
+		const newPosition = Math.min(currentPlayer.position + rolledValue, 39);
+		setAnimatingPlayer({
+			playerId: currentPlayer.id,
+			currentStep: currentPlayer.position,
+			targetPosition: newPosition,
+			startPosition: currentPlayer.position,
+		});
+	};
+
+	// Called when dice starts rolling
+	const handleDiceRollStart = () => {
 		setIsRolling(true);
-		
-		// Animate dice rolling
-		const rollInterval = setInterval(() => {
-			setDiceValue(Math.floor(Math.random() * 6) + 1);
-		}, 100);
-
-		// Stop rolling after 1 second and move player
-		setTimeout(() => {
-			clearInterval(rollInterval);
-			const finalValue = Math.floor(Math.random() * 6) + 1;
-			setDiceValue(finalValue);
-			setIsRolling(false);
-
-			// Start animation for current player
-			const newPosition = Math.min(currentPlayer.position + finalValue, 39);
-			setAnimatingPlayer({
-				playerId: currentPlayer.id,
-				currentStep: currentPlayer.position,
-				targetPosition: newPosition,
-				startPosition: currentPlayer.position,
-			});
-		}, 1000);
 	};
 
 	return (
@@ -358,24 +352,19 @@ export default function Board() {
                     
                     {/* Dice - Right Bottom */}
                     <div className="absolute right-[-120px] bottom-0 flex flex-col items-center">
-                        <button
-                            onClick={handleDiceRoll}
-                            disabled={!isCurrentPlayerTurn}
-                            className={`
-                                w-20 h-20 rounded-lg border-4 border-neutral-800
-                                flex items-center justify-center text-3xl font-bold
-                                transition-all duration-200
-                                ${isCurrentPlayerTurn
-                                    ? 'bg-white hover:bg-neutral-100 cursor-pointer active:scale-95' 
-                                    : 'bg-neutral-300 cursor-not-allowed opacity-60'
-                                }
-                            `}
+                        <div 
+                            className="relative"
                             style={{
-                                boxShadow: isCurrentPlayerTurn ? `0 0 20px ${currentPlayerColor}` : 'none'
+                                filter: isCurrentPlayerTurn ? `drop-shadow(0 0 15px ${currentPlayerColor})` : 'none'
                             }}
                         >
-                            {diceValue || "?"}
-                        </button>
+                            <Dice 
+                                size={120} 
+                                onRoll={handleDiceRoll}
+                                onRollStart={handleDiceRollStart}
+                                disabled={!isCurrentPlayerTurn || isRolling}
+                            />
+                        </div>
                         {currentPlayer && (
                             <p className="mt-2 text-sm text-neutral-600 font-semibold text-center">
                                 {currentPlayer.name} aan de beurt

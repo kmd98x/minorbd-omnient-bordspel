@@ -12,7 +12,7 @@ export default function Home() {
 				height={size}
 				className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 home-omnient-logo" />
 
-			<a href="/deelnemers" className="absolute left-1/2 -translate-x-1/2 bottom-10 bg-[#015772]  hover:bg-[#014A61] transition duration-300 uppercase tracking-[12px] font-bold text-white px-12 py-6 rounded-xl shadow-2xl">Starten</a>
+			<a href="/deelnemers" className="absolute left-1/2 -translate-x-1/2 bottom-10 bg-button  hover:bg-button-hover transition duration-300 uppercase tracking-[12px] font-bold text-white px-12 py-6 rounded-xl shadow-2xl">Starten</a>
 		</main>
 	)
 }
