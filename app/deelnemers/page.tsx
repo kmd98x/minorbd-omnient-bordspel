@@ -63,7 +63,7 @@ export default function Deelnemers() {
 
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-neutral-50 p-8 bg-no-repeat bg-cover" style={{ backgroundImage: "url('/images/homestate-2.svg')" }}>
-			<div className="bg-black/25 absolute inset-0 z-0"></div>
+			<div className="bg-black/25 fixed top-0 inset-0 z-0"></div>
 
 			<div className="bg-white/50 backdrop-blur-lg border border-button-hover rounded-2xl p-8 w-full max-w-lg z-10 relative">
 				<h1 className="text-4xl font-bold text-center mb-8 text-button-hover">

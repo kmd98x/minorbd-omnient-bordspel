@@ -37,8 +37,8 @@ export default function Dice({ size = 100, onRoll, onRollStart, disabled = false
 			1: 'rotateX(0deg) rotateY(0deg)',      // Face 1 is already at front
 			2: 'rotateX(0deg) rotateY(-90deg)',     // Rotate to show right face (2)
 			3: 'rotateX(0deg) rotateY(90deg)',      // Rotate to show left face (3)
-			4: 'rotateX(-90deg) rotateY(0deg)',     // Rotate to show top face (4)
-			5: 'rotateX(90deg) rotateY(0deg)',      // Rotate to show bottom face (5)
+			4: 'rotateX(90deg) rotateY(0deg)',     // Rotate to show top face (4)
+			5: 'rotateX(-90deg) rotateY(0deg)',      // Rotate to show bottom face (5)
 			6: 'rotateX(0deg) rotateY(180deg)',    // Rotate to show back face (6)
 		}
 
@@ -99,7 +99,7 @@ export default function Dice({ size = 100, onRoll, onRollStart, disabled = false
 				<div
 					className="dice-face face-4"
 					style={{
-						transform: `rotateX(90deg) translate3d(0, 0, ${size / 2}px)`,
+						transform: `rotateX(-90deg) translate3d(0, 0, ${size / 2}px)`,
 					}}
 				>
 					<div className="dot"></div>
@@ -112,7 +112,7 @@ export default function Dice({ size = 100, onRoll, onRollStart, disabled = false
 				<div
 					className="dice-face face-5"
 					style={{
-						transform: `rotateX(-90deg) translate3d(0, 0, ${size / 2}px)`,
+						transform: `rotateX(90deg) translate3d(0, 0, ${size / 2}px)`,
 					}}
 				>
 					<div className="dot"></div>
