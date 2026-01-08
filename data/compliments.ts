@@ -1,19 +1,35 @@
-export const COMPLIMENT_CARDS: Array<string> = [
-    "Geef de persoon links van jou een complimentje",
-    "Vertel één klein ding dat vandaag goed ging.",
-    "Noem één ding dat je waardeert in de persoon rechts van je.",
-    "Geef de persoon rechts van jou een complimentje",
-    "Wijs iemand aan van wie je iets hebt geleerd vandaag. En wat was dat?",
-    "Iedereen zegt één woord dat zijn/haar energie nu beschrijft.",
-    "Geef jezelf een compliment - wat deed je goed vandaag?",
-    "Noem iets waar je trots op bent deze week.",
-    "Deel iets positiefs dat iemand anders over jou heeft gezegd.",
-    "Vertel wat je een goede eigenschap vindt van de speler tegenover je.",
-    "Noem een moment waarop je iemand in dit spel hebt zien groeien.",
-    "Deel een kwaliteit die je bewondert in een andere speler.",
-    "Geef een compliment aan de speler die het langst nadenkt - dat is reflectie!",
-    "Vertel welke speler jou vandaag heeft geïnspireerd en waarom.",
-    "Noem iets unieks dat jij toevoegt aan deze groep."
-  ];
-  
-  
+export interface ComplimentCard {
+	mainText: string; // Larger/bold text
+	subText: string; // Smaller text below
+}
+
+export const COMPLIMENT_CARDS: Array<ComplimentCard> = [
+	{
+		mainText: "Geef de persoon links van jou een complimentje",
+		subText: "Over iets wat je waardeert in hoe diegene samenwerkt of communiceert."
+	},
+	{
+		mainText: "Kies iemand aan tafel en geef diegene een oprecht compliment",
+		subText: "Het mag klein zijn, zolang het echt is."
+	},
+	{
+		mainText: "Geef de persoon tegenover je een compliment",
+		subText: "Over iets wat je vandaag bij diegene hebt gezien of gemerkt."
+	},
+	{
+		mainText: "Geef een compliment over iemands houding",
+		subText: "Bijvoorbeeld hoe iemand luistert, meedoet of aanwezig is."
+	},
+	{
+		mainText: "Geef iemand een compliment over iets wat vaak niet opvalt",
+		subText: "Iets wat diegene doet zonder dat het altijd benoemd wordt."
+	},
+	{
+		mainText: "Geef iemand een compliment over iets waar diegene zelf misschien te bescheiden over is",
+		subText: "Iets waarvan jij denkt: dit mag vaker gezegd worden."
+	},
+	{
+		mainText: "Geef een compliment over iemands manier van omgaan met spanning of druk",
+		subText: "Denk aan rust, humor of doorzettingsvermogen."
+	}
+];
