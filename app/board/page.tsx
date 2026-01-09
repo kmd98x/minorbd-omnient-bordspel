@@ -45,8 +45,11 @@ export default function Board() {
 		if (!ctx) return;
 
 		// Set canvas size
-		canvas.width = 1000;
-		canvas.height = 1000;
+		canvas.width = 900;
+		canvas.height = 900;
+
+		// Scale factor to convert from 1000x1000 to 900x900
+		const scale = 0.9;
 
 		// Clear canvas
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -83,10 +86,15 @@ export default function Board() {
 
 			// Draw board positions
 			POSITIONS.forEach((position, index) => {
+				const scaledX = position.x * scale;
+				const scaledY = position.y * scale;
+				const radiusMultiplier = 1.3; // Make steps larger
+				const scaledRadius = position.radius * scale * radiusMultiplier;
+				
 				ctx.beginPath();
-				ctx.arc(position.x, position.y, position.radius, 0, 2 * Math.PI);
+				ctx.arc(scaledX, scaledY, scaledRadius, 0, 2 * Math.PI);
 				ctx.strokeStyle = "#737373"; // neutral-500 color
-				ctx.lineWidth = 2;
+				ctx.lineWidth = 1.5;
 				ctx.stroke();
 
 				// Draw image if available
@@ -94,20 +102,23 @@ export default function Board() {
 				if (img) {
 					ctx.save();
 					ctx.beginPath();
-					ctx.arc(position.x, position.y, position.radius, 0, 2 * Math.PI);
+					ctx.arc(scaledX, scaledY, scaledRadius, 0, 2 * Math.PI);
 					ctx.clip();
-					const size = position.radius * 0.8;
-					ctx.drawImage(img, position.x - size / 2, position.y - size / 2, size, size);
+					// Special size multiplier for bubbles (larger)
+					const isBubble = position.image?.includes('bubble');
+					const sizeMultiplier = isBubble ? 1.5 : 0.75;
+					const size = scaledRadius * sizeMultiplier;
+					ctx.drawImage(img, scaledX - size / 2, scaledY - size / 2, size, size);
 					ctx.restore();
 				}
 
 				// Add text if available
 				if (position.text.content !== "") {
 					ctx.fillStyle = "#000000";
-					ctx.font = "14px Arial";
+					ctx.font = "12px Arial";
 					ctx.textAlign = "center";
 					ctx.textBaseline = "middle";
-					ctx.fillText(position.text.content, position.text.x, position.text.y);
+					ctx.fillText(position.text.content, position.text.x * scale, position.text.y * scale);
 				}
 			});
 
@@ -127,11 +138,13 @@ export default function Board() {
 				if (!playerPawn) return;
 
 				// Draw the pawn image
-				const pawnSize = 40;
+				const pawnSize = 32;
+				const scaledX = position.x * scale;
+				const scaledY = position.y * scale;
 				ctx.drawImage(
 					playerPawn.img,
-					position.x - pawnSize / 2,
-					position.y - pawnSize / 2,
+					scaledX - pawnSize / 2,
+					scaledY - pawnSize / 2,
 					pawnSize,
 					pawnSize
 				);
@@ -140,6 +153,7 @@ export default function Board() {
 	}, [players, animatingPlayer]);
 
 	// Draw border separately (only when border visibility changes)
+	// Only draw border for the player whose turn it is
 	useEffect(() => {
 		const canvas = canvasRef.current;
 		if (!canvas || !imagesRef.current) return;
@@ -150,9 +164,11 @@ export default function Board() {
 		const currentPlayerInScope = players[currentPlayerIndex];
 		if (!currentPlayerInScope) return;
 
-		const shouldShowBorder = !isRolling && !animatingPlayer && borderVisible;
+		// Only show border when it's this player's turn and they're not rolling/animating
+		const isCurrentPlayerTurn = !isRolling && !animatingPlayer;
+		const shouldShowBorder = isCurrentPlayerTurn && borderVisible;
 
-		// Get player position
+		// Get player position - use same logic as main draw to avoid double drawing
 		let displayPosition = currentPlayerInScope.position;
 		if (animatingPlayer && animatingPlayer.playerId === currentPlayerInScope.id) {
 			displayPosition = animatingPlayer.currentStep;
@@ -164,39 +180,51 @@ export default function Board() {
 		const playerPawn = imagesRef.current.playerPawns.find((pp) => pp.playerId === currentPlayerInScope.id);
 		if (!playerPawn) return;
 
-		const pawnSize = 40;
+		const scale = 0.9;
+		const scaledX = position.x * scale;
+		const scaledY = position.y * scale;
+		const pawnSize = 32;
 
-		// Clear the area around the pawn
-		ctx.clearRect(
-			position.x - pawnSize / 2 - 8,
-			position.y - pawnSize / 2 - 8,
-			pawnSize + 16,
-			pawnSize + 16
-		);
+		// Only redraw if we need to show/hide the border and not animating
+		if (!animatingPlayer && (shouldShowBorder || (isCurrentPlayerTurn && borderVisible === false))) {
+			// Clear the area around the pawn
+			ctx.clearRect(
+				scaledX - pawnSize / 2 - 8,
+				scaledY - pawnSize / 2 - 8,
+				pawnSize + 16,
+				pawnSize + 16
+			);
 
-		// Redraw the pawn
-		ctx.drawImage(
-			playerPawn.img,
-			position.x - pawnSize / 2,
-			position.y - pawnSize / 2,
-			pawnSize,
-			pawnSize
-		);
+			// Redraw the pawn
+			ctx.drawImage(
+				playerPawn.img,
+				scaledX - pawnSize / 2,
+				scaledY - pawnSize / 2,
+				pawnSize,
+				pawnSize
+			);
 
-		// Draw border if needed
-		if (shouldShowBorder) {
-			ctx.save();
-			ctx.strokeStyle = playerColors[currentPlayerInScope.id] || "#737373";
-			ctx.lineWidth = 4;
-			ctx.beginPath();
-			ctx.arc(position.x, position.y, pawnSize / 2 + 4, 0, 2 * Math.PI);
-			ctx.stroke();
-			ctx.restore();
+			// Draw border only if it's this player's turn and border should be visible
+			if (shouldShowBorder) {
+				ctx.save();
+				ctx.strokeStyle = playerColors[currentPlayerInScope.id] || "#737373";
+				ctx.lineWidth = 3;
+				ctx.beginPath();
+				ctx.arc(scaledX, scaledY, pawnSize / 2 + 3, 0, 2 * Math.PI);
+				ctx.stroke();
+				ctx.restore();
+			}
 		}
-	}, [borderVisible, currentPlayerIndex, isRolling, animatingPlayer, players]);
+	}, [borderVisible, currentPlayerIndex, isRolling, animatingPlayer, players, playerColors]);
 
-    const textStyling = "border-x border-neutral-800 flex-1 text-center py-2"
 	const cardLabels = ["Be perfect", "Hurry up", "Be strong", "Pleaser", "Try hard"];
+	const cardImages = [
+		"/images/cards/be-perfect.svg",
+		"/images/cards/hurry-up.svg",
+		"/images/cards/be-strong.svg",
+		"/images/cards/pleaser.svg",
+		"/images/cards/try-hard.svg"
+	];
 
 	// Get players by position
 	const player1 = players.find(p => p.id === 1);
@@ -301,43 +329,31 @@ export default function Board() {
 	};
 
 	return (
-        <div className="relative flex flex-col items-center">
+        <div 
+            className="relative flex flex-col items-center min-h-screen w-full"
+            style={{
+                backgroundImage: 'url(/images/finalhomestate.jpg)',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+            }}
+        >
             {/* Player 1 - Top */}
             {player1 && (
-                <>
-                    <div className="w-[1000px] mb-2">
-                        <h2 className="text-xl font-semibold text-center text-neutral-800 flex items-center justify-center gap-2">
-                            <img
-                                src="/images/player-1.svg"
-                                alt="Speler 1"
-                                className="h-8 w-8"
-                            />
-                            {player1.name}
-                        </h2>
-                    </div>
-                    <div className="flex items-center justify-between w-[1000px] border-b-2 border-neutral-800 mt-20 mb-10" id="player-1">
-                        {cardLabels.map((label, index) => (
-                            <p key={index} className={textStyling}>{label}</p>
-                        ))}
-                    </div>
-                </>
+                <div className="flex items-center justify-between w-[900px] mb-8 p-5 rounded-2xl" id="player-1">
+                    {cardImages.map((image, index) => (
+                        <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
+                    ))}
+                </div>
             )}
 
             <div className="relative flex items-center justify-center">
                 {/* Player 4 - Left */}
                 {player4 && (
-                    <div className="absolute left-[-600px] top-1/2 -translate-y-1/2 flex flex-col items-center -rotate-90 origin-center">
-                        <h2 className="text-xl font-semibold text-center text-neutral-800 whitespace-nowrap mb-4 flex items-center justify-center gap-2">
-                            <img
-                                src="/images/player-4.svg"
-                                alt="Speler 4"
-                                className="h-8 w-8"
-                            />
-                            {player4.name}
-                        </h2>
-                        <div className="flex items-center justify-between w-[1000px] border-b-2 border-neutral-800" id="player-4">
-                            {cardLabels.map((label, index) => (
-                                <p key={index} className={textStyling}>{label}</p>
+                    <div className="absolute left-[-650px] top-1/2 -translate-y-1/2 flex flex-col items-center -rotate-90 origin-center">
+                        <div className="flex items-center justify-between w-[900px] p-5 rounded-2xl" id="player-4">
+                            {cardImages.map((image, index) => (
+                                <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
                             ))}
                         </div>
                     </div>
@@ -347,11 +363,95 @@ export default function Board() {
                 <div className="relative">
                     <canvas
                         ref={canvasRef}
-                        className="w-[1000px] h-[1000px]"
+                        className="w-[900px] h-[900px] m-10"
                     />
                     
+                    {/* Player 1 - Top (inside) */}
+                    {player1 && (
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2">
+                            <h2 className="text-lg font-semibold text-center text-neutral-800 flex items-center justify-center gap-2">
+                                <img
+                                    src="/images/player-1.svg"
+                                    alt="Speler 1"
+                                    className="h-6 w-6"
+                                />
+                                {player1.name}
+                            </h2>
+                        </div>
+                    )}
+
+                    {/* Player 2 - Bottom (inside) */}
+                    {player2 && (
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
+                            <h2 className="text-lg font-semibold text-center text-neutral-800 flex items-center justify-center gap-2">
+                                <img
+                                    src="/images/player-2.svg"
+                                    alt="Speler 2"
+                                    className="h-6 w-6"
+                                />
+                                {player2.name}
+                            </h2>
+                        </div>
+                    )}
+
+                    {/* Player 3 - Right (inside) */}
+                    {player3 && (
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 rotate-90 origin-center">
+                            <h2 className="text-lg font-semibold text-center text-neutral-800 whitespace-nowrap flex items-center justify-center gap-2">
+                                <img
+                                    src="/images/player-3.svg"
+                                    alt="Speler 3"
+                                    className="h-6 w-6"
+                                />
+                                {player3.name}
+                            </h2>
+                        </div>
+                    )}
+
+                    {/* Player 4 - Left (inside) */}
+                    {player4 && (
+                        <div className="absolute -left-8 top-1/2 -translate-y-1/2 -rotate-90 origin-center">
+                            <h2 className="text-lg font-semibold text-center text-neutral-800 whitespace-nowrap flex items-center justify-center gap-2">
+                                <img
+                                    src="/images/player-4.svg"
+                                    alt="Speler 4"
+                                    className="h-6 w-6"
+                                />
+                                {player4.name}
+                            </h2>
+                        </div>
+                    )}
+
+                    {/* Card Decks */}
+                    {/* Compliments Card Deck - Right Top */}
+                    <div className="absolute right-[380px] top-6">
+                        <img
+                            src="/images/cards/compliment-card-deck.svg"
+                            alt="Compliments Card Deck"
+                            className="h-[235px]"
+                        />
+                    </div>
+
+                    {/* Statement Card Deck - Left Middle */}
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                        <img
+                            src="/images/cards/statement-card-deck.svg"
+                            alt="Statement Card Deck"
+                            className="h-[175px]"
+                        />
+                    </div>
+
+                    {/* Bonding Card Deck - Right Bottom */}
+                    <div className="absolute right-[200px] bottom-[230px]">
+                        <img
+                            src="/images/cards/bonding-card-deck.svg"
+                            alt="Bonding Card Deck"
+                            className="h-[235px]"
+                        />
+                    </div>
+                    
                     {/* Dice - Right Bottom */}
-                    <div className="absolute right-[-120px] bottom-0 flex flex-col items-center">
+                    <div className="absolute right-[-100px] bottom-0 flex flex-col items-center">
                         <div 
                             className="relative"
                             style={{
@@ -359,14 +459,14 @@ export default function Board() {
                             }}
                         >
                             <Dice 
-                                size={120} 
+                                size={100} 
                                 onRoll={handleDiceRoll}
                                 onRollStart={handleDiceRollStart}
                                 disabled={!isCurrentPlayerTurn || isRolling}
                             />
                         </div>
                         {currentPlayer && (
-                            <p className="mt-2 text-sm text-neutral-600 font-semibold text-center">
+                            <p className="mt-2 text-xs text-neutral-600 font-semibold text-center">
                                 {currentPlayer.name} aan de beurt
                             </p>
                         )}
@@ -375,18 +475,10 @@ export default function Board() {
 
                 {/* Player 3 - Right */}
                 {player3 && (
-                    <div className="absolute right-[-600px] top-1/2 -translate-y-1/2 flex flex-col items-center rotate-90 origin-center">
-                        <h2 className="text-xl font-semibold text-center text-neutral-800 whitespace-nowrap mb-4 flex items-center justify-center gap-2">
-                            <img
-                                src="/images/player-3.svg"
-                                alt="Speler 3"
-                                className="h-8 w-8"
-                            />
-                            {player3.name}
-                        </h2>
-                        <div className="flex items-center justify-between w-[1000px] border-b-2 border-neutral-800" id="player-3">
-                            {cardLabels.map((label, index) => (
-                                <p key={index} className={textStyling}>{label}</p>
+                    <div className="absolute right-[-640px] top-1/2 -translate-y-1/2 flex flex-col items-center rotate-90 origin-center">
+                        <div className="flex items-center justify-between w-[900px] p-5 rounded-2xl" id="player-3">
+                            {cardImages.map((image, index) => (
+                                <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
                             ))}
                         </div>
                     </div>
@@ -395,23 +487,11 @@ export default function Board() {
 
             {/* Player 2 - Bottom */}
             {player2 && (
-                <>
-                    <div className="w-[1000px] mt-2">
-                        <h2 className="text-xl font-semibold text-center text-neutral-800 flex items-center justify-center gap-2">
-                            <img
-                                src="/images/player-2.svg"
-                                alt="Speler 2"
-                                className="h-8 w-8"
-                            />
-                            {player2.name}
-                        </h2>
-                    </div>
-                    <div className="flex items-center justify-between w-[1000px] border-t-2 border-neutral-800 mb-20 mt-10" id="player-2">
-                        {cardLabels.map((label, index) => (
-                            <p key={index} className={textStyling}>{label}</p>
-                        ))}
-                    </div>
-                </>
+                <div className="flex items-center justify-between w-[900px] mt-8 p-5 rounded-2xl" id="player-2">
+                    {cardImages.map((image, index) => (
+                        <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
+                    ))}
+                </div>
             )}
         </div>
 	);
