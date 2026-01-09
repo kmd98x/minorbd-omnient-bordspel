@@ -1,7 +1,7 @@
 import Image from "next/image"
 
 export default function Home() {
-	const size = 300;
+	const size = 250;
 
 	return (
 		<main style={{ backgroundImage: "url('/images/finalhomestate.jpg')" }} className="h-screen w-screen bg-no-repeat bg-cover">
