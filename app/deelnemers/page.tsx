@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGame } from "@/contexts/GameContext";
+import GameRulesModal from "@/components/GameRulesModal";
 
 type PlayerSetup = {
 	name: string;
@@ -55,6 +56,7 @@ export default function Deelnemers() {
 			name: setup.name.trim(),
 			icon: defaultIcons[originalIndex] || "/images/boek.svg",
 			position: 1,
+			cards: [],
 		}));
 
 		setPlayers(players);
@@ -102,20 +104,13 @@ export default function Deelnemers() {
 					))}
 				</div>
 
-				{/* Pop-up modal */}
-				<div className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-button-hover ${displayPopup ? " pointer-events-auto opacity-100 mt-0" : "opacity-0 pointer-events-none mt-5" } transition-all duration-500 p-8 rounded-2xl bg-white shadow-2xl max-w-xl w-full`}>
-					<p className="absolute top-2 right-2 bg-button hover:to-button-hover text-white px-5 py-2 rounded-lg cursor-pointer" onClick={() => setDisplayPopup(false)}>X</p>
-					<h2 className="font-bold text-2xl">Spelregels</h2>
-
-					<ul className="list-disc pl-6 py-5">
-						<li>Wat je deelt blijft hier</li>
-						<li>Overslaan mag altijd</li>
-						<li>Er zijn geen foute antwoorden</li>
-						<li>Niemand oordeelt</li>
-					</ul>
-
-					<button onClick={handleStartGame} className="w-full cursor-pointer py-4 bg-button text-white rounded-lg font-semibold text-lg hover:bg-button-hover transition-colors">Ik heb het begrepen, spel starten</button>
-				</div>
+				{/* Game Rules Modal */}
+				<GameRulesModal
+					isOpen={displayPopup}
+					onClose={() => setDisplayPopup(false)}
+					showStartButton={true}
+					onStart={handleStartGame}
+				/>
 
 				{/* Start Game Button */}
 				<button

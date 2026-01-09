@@ -1,13 +1,20 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { POSITIONS } from "@/data/circle-positions";
 import { useGame } from "@/contexts/GameContext";
 import Dice from "@/components/Dice";
+import GameRulesModal from "@/components/GameRulesModal";
+import CardModal from "@/components/CardModal";
+import { STATEMENTS, StatementCard } from "@/data/statements";
+import { COMPLIMENT_CARDS, ComplimentCard } from "@/data/compliments";
+import { BONDING_CARDS } from "@/data/bonding";
 
 export default function Board() {
+	const router = useRouter();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const { players, currentPlayerIndex, updatePlayerPosition, setCurrentPlayerIndex } = useGame();
+	const { players, currentPlayerIndex, updatePlayerPosition, setCurrentPlayerIndex, addCardToPlayer } = useGame();
 	const [diceValue, setDiceValue] = useState<number | null>(null);
 	const [isRolling, setIsRolling] = useState(false);
 	const [animatingPlayer, setAnimatingPlayer] = useState<{
@@ -21,6 +28,14 @@ export default function Board() {
 		targetPosition: number;
 	} | null>(null);
 	const [borderVisible, setBorderVisible] = useState(true);
+	const [showRulesModal, setShowRulesModal] = useState(false);
+	const [showRestartModal, setShowRestartModal] = useState(false);
+	const [showEnjoyMessage, setShowEnjoyMessage] = useState(false);
+	const [showCardModal, setShowCardModal] = useState(false);
+	const [cardToShow, setCardToShow] = useState<{
+		type: "statement" | "compliment" | "bonding";
+		card: StatementCard | ComplimentCard | string;
+	} | null>(null);
 
 	// Player colors
 	const playerColors: Record<number, string> = {
@@ -91,11 +106,27 @@ export default function Board() {
 				const radiusMultiplier = 1.3; // Make steps larger
 				const scaledRadius = position.radius * scale * radiusMultiplier;
 				
+				// Set drop shadow
+				ctx.shadowBlur = 2.87;
+				ctx.shadowOffsetX = 0;
+				ctx.shadowOffsetY = 2.87;
+				ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+				
 				ctx.beginPath();
 				ctx.arc(scaledX, scaledY, scaledRadius, 0, 2 * Math.PI);
+				// Fill with white background at 80% opacity
+				ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+				ctx.fill();
+				// Draw border
 				ctx.strokeStyle = "#737373"; // neutral-500 color
 				ctx.lineWidth = 1.5;
 				ctx.stroke();
+				
+				// Reset shadow
+				ctx.shadowBlur = 0;
+				ctx.shadowOffsetX = 0;
+				ctx.shadowOffsetY = 0;
+				ctx.shadowColor = "transparent";
 
 				// Draw image if available
 				const { img } = positionImages[index];
@@ -104,9 +135,15 @@ export default function Board() {
 					ctx.beginPath();
 					ctx.arc(scaledX, scaledY, scaledRadius, 0, 2 * Math.PI);
 					ctx.clip();
-					// Special size multiplier for bubbles (larger)
+					// Special size multipliers
 					const isBubble = position.image?.includes('bubble');
-					const sizeMultiplier = isBubble ? 1.5 : 0.75;
+					const isText = position.image?.includes('text');
+					let sizeMultiplier = 0.75;
+					if (isBubble) {
+						sizeMultiplier = 1.5;
+					} else if (isText) {
+						sizeMultiplier = 3.0; // Make start/finish text larger
+					}
 					const size = scaledRadius * sizeMultiplier;
 					ctx.drawImage(img, scaledX - size / 2, scaledY - size / 2, size, size);
 					ctx.restore();
@@ -244,15 +281,34 @@ export default function Board() {
 			return;
 		}
 
-		// Toggle border visibility every 2000ms
+		// Toggle border visibility every 500ms (faster blinking)
 		const blinkInterval = setInterval(() => {
 			setBorderVisible((prev) => !prev);
-		}, 1000);
+		}, 500);
 
 		return () => {
 			clearInterval(blinkInterval);
 		};
 	}, [isCurrentPlayerTurn]);
+
+	// Scroll to current player's deck when turn changes
+	useEffect(() => {
+		if (!currentPlayer) return;
+		
+		const playerDeckId = `player-${currentPlayer.id}`;
+		const playerDeck = document.getElementById(playerDeckId);
+		
+		if (playerDeck) {
+			// Small delay to ensure DOM is updated
+			setTimeout(() => {
+				playerDeck.scrollIntoView({ 
+					behavior: 'smooth', 
+					block: 'center',
+					inline: 'center'
+				});
+			}, 100);
+		}
+	}, [currentPlayerIndex, currentPlayer]);
 
 	// Animate player movement
 	useEffect(() => {
@@ -288,23 +344,139 @@ export default function Board() {
 		};
 	}, [animatingPlayer]);
 
-	// Handle animation completion and move to next player
+	// Get random card from deck
+	const getRandomCard = (type: "statement" | "compliment" | "bonding") => {
+		if (type === "statement") {
+			const randomIndex = Math.floor(Math.random() * STATEMENTS.length);
+			return STATEMENTS[randomIndex];
+		} else if (type === "compliment") {
+			const randomIndex = Math.floor(Math.random() * COMPLIMENT_CARDS.length);
+			return COMPLIMENT_CARDS[randomIndex];
+		} else {
+			const randomIndex = Math.floor(Math.random() * BONDING_CARDS.length);
+			return BONDING_CARDS[randomIndex];
+		}
+	};
+
+	// Handle special actions and card drawing
+	const handlePositionAction = (playerId: number, position: number): boolean => {
+		const positionData = POSITIONS.find(p => p.number === position);
+		if (!positionData) return false;
+
+		const image = positionData.image || "";
+		let finalPosition = position;
+
+		// Handle special actions first
+		if (image.includes("+2")) {
+			// Move 2 steps forward
+			finalPosition = Math.min(position + 2, 39);
+			updatePlayerPosition(playerId, finalPosition);
+			return false; // No card for special actions
+		} else if (image.includes("-1")) {
+			// Move 1 step backward
+			finalPosition = Math.max(position - 1, 1);
+			updatePlayerPosition(playerId, finalPosition);
+			return false; // No card for special actions
+		} else if (image.includes("verwissel")) {
+			// Swap with next player (clockwise)
+			const currentPlayerIdx = players.findIndex(p => p.id === playerId);
+			if (currentPlayerIdx !== -1) {
+				const nextPlayerIdx = (currentPlayerIdx + 1) % players.length;
+				const nextPlayer = players[nextPlayerIdx];
+				const currentPlayer = players[currentPlayerIdx];
+				
+				// Swap positions
+				const tempPosition = currentPlayer.position;
+				updatePlayerPosition(currentPlayer.id, nextPlayer.position);
+				updatePlayerPosition(nextPlayer.id, tempPosition);
+			}
+			return false; // Don't draw card on swap
+		}
+
+		// Determine card type to draw
+		let cardType: "statement" | "compliment" | "bonding" | null = null;
+		
+		if (image.includes("compliment-bubble") || image.includes("hart")) {
+			// Compliment card
+			cardType = "compliment";
+		} else if (image.includes("bonding-bubble") || image.includes("hand")) {
+			// Bonding card
+			cardType = "bonding";
+		} else if (!image.includes("+2") && !image.includes("-1") && !image.includes("verwissel") && !image.includes("text")) {
+			// Statement card (default for normal positions without special icons)
+			cardType = "statement";
+		}
+
+		// Show card modal if card should be drawn
+		if (cardType) {
+			const card = getRandomCard(cardType);
+			setCardToShow({ type: cardType, card });
+			setShowCardModal(true);
+			return true; // Card will be shown
+		}
+
+		return false; // No card to show
+	};
+
+	// Handle animation completion
 	useEffect(() => {
 		if (!animationComplete) return;
 
-		// Update player position
-		updatePlayerPosition(animationComplete.playerId, animationComplete.targetPosition);
+		const { playerId, targetPosition } = animationComplete;
+
+		// Update player position first
+		updatePlayerPosition(playerId, targetPosition);
+
+		// Then handle special actions and card drawing
+		const shouldShowCard = handlePositionAction(playerId, targetPosition);
 		
-		// Move to next player's turn
-		const currentPlayerIdx = players.findIndex(p => p.id === animationComplete.playerId);
-		if (currentPlayerIdx !== -1) {
-			const nextIndex = (currentPlayerIdx + 1) % players.length;
-			setCurrentPlayerIndex(nextIndex);
+		// If no card should be shown, move to next player immediately
+		if (!shouldShowCard) {
+			const currentPlayerIdx = players.findIndex(p => p.id === playerId);
+			if (currentPlayerIdx !== -1) {
+				const nextIndex = (currentPlayerIdx + 1) % players.length;
+				setCurrentPlayerIndex(nextIndex);
+			}
 		}
 		
 		// Clear completion state
 		setAnimationComplete(null);
 	}, [animationComplete, updatePlayerPosition, setCurrentPlayerIndex, players]);
+
+	// Move to next player after card is drawn
+	const handleCardDrawn = () => {
+		// Find current player and move to next
+		const currentPlayerIdx = players.findIndex(p => p.id === currentPlayer?.id);
+		if (currentPlayerIdx !== -1) {
+			const nextIndex = (currentPlayerIdx + 1) % players.length;
+			setCurrentPlayerIndex(nextIndex);
+		}
+	};
+
+	// Handle drop on player deck
+	const handleDrop = (e: React.DragEvent, playerId: number) => {
+		e.preventDefault();
+		
+		// Only allow drop on current player's deck
+		if (playerId !== currentPlayer?.id) return;
+
+		const cardData = e.dataTransfer.getData("application/json");
+		if (cardData) {
+			try {
+				const card: StatementCard = JSON.parse(cardData);
+				addCardToPlayer(playerId, card);
+				setShowCardModal(false);
+				handleCardDrawn();
+			} catch (error) {
+				console.error("Error parsing card data:", error);
+			}
+		}
+	};
+
+	const handleDragOver = (e: React.DragEvent) => {
+		e.preventDefault();
+		e.dataTransfer.dropEffect = "move";
+	};
 
 	// Roll dice function - called when dice finishes rolling
 	const handleDiceRoll = (rolledValue: number) => {
@@ -332,7 +504,7 @@ export default function Board() {
         <div 
             className="relative flex flex-col items-center min-h-screen w-full"
             style={{
-                backgroundImage: 'url(/images/finalhomestate.jpg)',
+                backgroundImage: 'url(/images/background-image.png)',
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 backgroundRepeat: 'no-repeat'
@@ -340,10 +512,32 @@ export default function Board() {
         >
             {/* Player 1 - Top */}
             {player1 && (
-                <div className="flex items-center justify-between w-[900px] mb-8 p-5 rounded-2xl" id="player-1">
-                    {cardImages.map((image, index) => (
-                        <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
-                    ))}
+                <div 
+                    className={`flex items-center justify-between w-[900px] mb-8 p-5 rounded-2xl transition-all ${
+                        currentPlayer?.id === 1 && borderVisible && isCurrentPlayerTurn
+                            ? 'border-4'
+                            : 'border-4 border-transparent'
+                    } ${currentPlayer?.id === 1 ? 'bg-neutral-50/50' : ''}`}
+                    id="player-1"
+                    style={{
+                        borderColor: currentPlayer?.id === 1 && borderVisible && isCurrentPlayerTurn 
+                            ? 'var(--color-button-hover)' 
+                            : 'transparent'
+                    }}
+                    onDrop={(e) => handleDrop(e, 1)}
+                    onDragOver={handleDragOver}
+                >
+                    {player1.cards.length > 0 ? (
+                        player1.cards.map((card, index) => (
+                            <div key={index} className="flex-1 bg-white rounded-lg p-4 border-2 border-button-hover mx-2 max-h-[235px] overflow-y-auto">
+                                <p className="text-sm font-medium text-neutral-800">{card.text}</p>
+                            </div>
+                        ))
+                    ) : (
+                        cardImages.map((image, index) => (
+                            <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
+                        ))
+                    )}
                 </div>
             )}
 
@@ -351,10 +545,32 @@ export default function Board() {
                 {/* Player 4 - Left */}
                 {player4 && (
                     <div className="absolute left-[-650px] top-1/2 -translate-y-1/2 flex flex-col items-center -rotate-90 origin-center">
-                        <div className="flex items-center justify-between w-[900px] p-5 rounded-2xl" id="player-4">
-                            {cardImages.map((image, index) => (
-                                <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
-                            ))}
+                        <div 
+                            className={`flex items-center justify-between w-[900px] p-5 rounded-2xl transition-all ${
+                                currentPlayer?.id === 4 && borderVisible && isCurrentPlayerTurn
+                                    ? 'border-4'
+                                    : 'border-4 border-transparent'
+                            } ${currentPlayer?.id === 4 ? 'bg-neutral-50/50' : ''}`}
+                            id="player-4"
+                            style={{
+                                borderColor: currentPlayer?.id === 4 && borderVisible && isCurrentPlayerTurn 
+                                    ? 'var(--color-button-hover)' 
+                                    : 'transparent'
+                            }}
+                            onDrop={(e) => handleDrop(e, 4)}
+                            onDragOver={handleDragOver}
+                        >
+                            {player4.cards.length > 0 ? (
+                                player4.cards.map((card, index) => (
+                                    <div key={index} className="flex-1 bg-white rounded-lg p-4 border-2 border-button-hover mx-2 max-h-[235px] overflow-y-auto">
+                                        <p className="text-sm font-medium text-neutral-800">{card.text}</p>
+                                    </div>
+                                ))
+                            ) : (
+                                cardImages.map((image, index) => (
+                                    <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
+                                ))
+                            )}
                         </div>
                     </div>
                 )}
@@ -450,8 +666,15 @@ export default function Board() {
                         />
                     </div>
                     
-                    {/* Dice - Right Bottom */}
-                    <div className="absolute right-[-100px] bottom-0 flex flex-col items-center">
+
+                    {/* Game Rules Modal */}
+                    <GameRulesModal
+                        isOpen={showRulesModal}
+                        onClose={() => setShowRulesModal(false)}
+                    />
+
+                    {/* Dice - Center */}
+                    <div className="absolute left-1/2 top-1/2 -translate-x-[calc(50%+63px)] -translate-y-[calc(50%+67px)] flex flex-col items-center z-10">
                         <div 
                             className="relative"
                             style={{
@@ -459,27 +682,154 @@ export default function Board() {
                             }}
                         >
                             <Dice 
-                                size={100} 
+                                size={50} 
                                 onRoll={handleDiceRoll}
                                 onRollStart={handleDiceRollStart}
                                 disabled={!isCurrentPlayerTurn || isRolling}
                             />
                         </div>
-                        {currentPlayer && (
-                            <p className="mt-2 text-xs text-neutral-600 font-semibold text-center">
-                                {currentPlayer.name} aan de beurt
-                            </p>
-                        )}
                     </div>
+
+                    {/* Restart Button and Info Icon - Top Right */}
+                    <div className="absolute right-4 top-4 flex items-center gap-3 z-10">
+                        <button
+                            onClick={() => setShowRestartModal(true)}
+                            className="bg-button hover:bg-button-hover transition duration-300 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-2 font-semibold text-lg"
+                            aria-label="Spel herstarten"
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth={2.5}
+                                stroke="currentColor"
+                                className="w-6 h-6"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+                                />
+                            </svg>
+                            Restarten
+                        </button>
+                        <button
+                            onClick={() => setShowRulesModal(true)}
+                            className="bg-button hover:bg-button-hover text-white rounded-full w-10 h-10 flex items-center justify-center transition-colors shadow-lg"
+                            aria-label="Spelregels bekijken"
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth={2.5}
+                                stroke="currentColor"
+                                className="w-6 h-6"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {/* Restart Confirmation Modal */}
+                    {showRestartModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+                                <h2 className="text-2xl font-bold text-center mb-6 text-button-hover">
+                                    Bent u zeker dat u opnieuw wilt starten?
+                                </h2>
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={() => {
+                                            setShowRestartModal(false);
+                                            router.push("/deelnemers");
+                                        }}
+                                        className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg transition-colors font-semibold"
+                                    >
+                                        Ja
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowRestartModal(false);
+                                            setShowEnjoyMessage(true);
+                                            setTimeout(() => setShowEnjoyMessage(false), 2000);
+                                        }}
+                                        className="flex-1 bg-neutral-200 hover:bg-neutral-300 text-neutral-800 px-6 py-3 rounded-lg transition-colors font-semibold"
+                                    >
+                                        Nee
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Enjoy Message */}
+                    {showEnjoyMessage && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 text-center">
+                                <p className="text-2xl font-bold text-button-hover">
+                                    Veel plezier! 🎲
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Card Modal */}
+                    {cardToShow && (
+                        <CardModal
+                            isOpen={showCardModal}
+                            onClose={() => {
+                                setShowCardModal(false);
+                                handleCardDrawn();
+                            }}
+                            cardType={cardToShow.type}
+                            card={cardToShow.card}
+                            onCardDrawn={handleCardDrawn}
+                            onCardDropped={(card) => {
+                                if (currentPlayer) {
+                                    addCardToPlayer(currentPlayer.id, card);
+                                    setShowCardModal(false);
+                                    handleCardDrawn();
+                                }
+                            }}
+                            currentPlayerId={currentPlayer?.id}
+                        />
+                    )}
                 </div>
 
                 {/* Player 3 - Right */}
                 {player3 && (
                     <div className="absolute right-[-640px] top-1/2 -translate-y-1/2 flex flex-col items-center rotate-90 origin-center">
-                        <div className="flex items-center justify-between w-[900px] p-5 rounded-2xl" id="player-3">
-                            {cardImages.map((image, index) => (
-                                <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
-                            ))}
+                        <div 
+                            className={`flex items-center justify-between w-[900px] p-5 rounded-2xl transition-all ${
+                                currentPlayer?.id === 3 && borderVisible && isCurrentPlayerTurn
+                                    ? 'border-4'
+                                    : 'border-4 border-transparent'
+                            } ${currentPlayer?.id === 3 ? 'bg-neutral-50/50' : ''}`}
+                            id="player-3"
+                            style={{
+                                borderColor: currentPlayer?.id === 3 && borderVisible && isCurrentPlayerTurn 
+                                    ? 'var(--color-button-hover)' 
+                                    : 'transparent'
+                            }}
+                            onDrop={(e) => handleDrop(e, 3)}
+                            onDragOver={handleDragOver}
+                        >
+                            {player3.cards.length > 0 ? (
+                                player3.cards.map((card, index) => (
+                                    <div key={index} className="flex-1 bg-white rounded-lg p-4 border-2 border-button-hover mx-2 max-h-[235px] overflow-y-auto">
+                                        <p className="text-sm font-medium text-neutral-800">{card.text}</p>
+                                    </div>
+                                ))
+                            ) : (
+                                cardImages.map((image, index) => (
+                                    <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
+                                ))
+                            )}
                         </div>
                     </div>
                 )}
@@ -487,10 +837,32 @@ export default function Board() {
 
             {/* Player 2 - Bottom */}
             {player2 && (
-                <div className="flex items-center justify-between w-[900px] mt-8 p-5 rounded-2xl" id="player-2">
-                    {cardImages.map((image, index) => (
-                        <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
-                    ))}
+                <div 
+                    className={`flex items-center justify-between w-[900px] mt-8 p-5 rounded-2xl transition-all ${
+                        currentPlayer?.id === 2 && borderVisible && isCurrentPlayerTurn
+                            ? 'border-4'
+                            : 'border-4 border-transparent'
+                    } ${currentPlayer?.id === 2 ? 'bg-neutral-50/50' : ''}`}
+                    id="player-2"
+                    style={{
+                        borderColor: currentPlayer?.id === 2 && borderVisible && isCurrentPlayerTurn 
+                            ? 'var(--color-button-hover)' 
+                            : 'transparent'
+                    }}
+                    onDrop={(e) => handleDrop(e, 2)}
+                    onDragOver={handleDragOver}
+                >
+                    {player2.cards.length > 0 ? (
+                        player2.cards.map((card, index) => (
+                            <div key={index} className="flex-1 bg-white rounded-lg p-4 border-2 border-button-hover mx-2 max-h-[235px] overflow-y-auto">
+                                <p className="text-sm font-medium text-neutral-800">{card.text}</p>
+                            </div>
+                        ))
+                    ) : (
+                        cardImages.map((image, index) => (
+                            <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
+                        ))
+                    )}
                 </div>
             )}
         </div>

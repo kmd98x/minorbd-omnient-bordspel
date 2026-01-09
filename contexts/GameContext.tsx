@@ -1,12 +1,14 @@
 "use client";
 
 import { createContext, useContext, useState, ReactNode } from "react";
+import { StatementCard } from "@/data/statements";
 
 export type Player = {
 	id: number;
 	name: string;
 	icon: string;
 	position: number; // Position on the board (1-39)
+	cards: StatementCard[]; // Cards in player's deck
 };
 
 type GameContextType = {
@@ -15,6 +17,7 @@ type GameContextType = {
 	updatePlayerPosition: (playerId: number, newPosition: number) => void;
 	addPlayer: (name: string, icon: string) => void;
 	removePlayer: (playerId: number) => void;
+	addCardToPlayer: (playerId: number, card: StatementCard) => void;
 	currentPlayerIndex: number;
 	setCurrentPlayerIndex: (index: number) => void;
 };
@@ -41,8 +44,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
 			name,
 			icon,
 			position: 1, // Start at position 1 (START)
+			cards: [], // Initialize empty cards array
 		};
 		setPlayers((prevPlayers) => [...prevPlayers, newPlayer]);
+	};
+
+	const addCardToPlayer = (playerId: number, card: StatementCard) => {
+		setPlayers((prevPlayers) =>
+			prevPlayers.map((player) =>
+				player.id === playerId
+					? { ...player, cards: [...player.cards, card] }
+					: player
+			)
+		);
 	};
 
 	const removePlayer = (playerId: number) => {
@@ -57,6 +71,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 				updatePlayerPosition,
 				addPlayer,
 				removePlayer,
+				addCardToPlayer,
 				currentPlayerIndex,
 				setCurrentPlayerIndex,
 			}}
