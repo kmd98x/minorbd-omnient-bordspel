@@ -582,8 +582,15 @@ export default function Board() {
 
 	// Handle card drawn from stack
 	const handleCardDrawnFromStack = (card: StatementCard | ComplimentCard | string) => {
+		// Card is already displayed in CardStack component
+		// When card is clicked (not dragged), close CardStack and move to next player
+		// When card is dragged and dropped, handleDrop will handle closing
 		if (activeCardStack === "statement") {
-			setDrawnCard(card as StatementCard);
+			// For statement cards clicked (not dragged), close CardStack and move to next player
+			// If dragged, handleDrop will handle the close
+			setDrawnCard(null); // Clear any previous drawn card
+			setActiveCardStack(null); // Close CardStack
+			handleCardDrawn(); // Move to next player
 		} else {
 			// For compliment and bonding, just close and move to next player
 			setActiveCardStack(null);
@@ -806,7 +813,7 @@ export default function Board() {
                             <img
                                 src="/images/cards/compliment-card-deck.svg"
                                 alt="Compliments Card Deck"
-                                className="h-[235px] opacity-50"
+                                className={`h-[235px] ${activeCardStack === "statement" || activeCardStack === "bonding" ? "opacity-20" : ""}`}
                             />
                         </div>
                     )}
@@ -822,7 +829,7 @@ export default function Board() {
                             <img
                                 src="/images/cards/statement-card-deck.svg"
                                 alt="Statement Card Deck"
-                                className="h-[175px] opacity-50"
+                                className={`h-[175px] ${activeCardStack === "compliment" || activeCardStack === "bonding" ? "opacity-20" : ""}`}
                             />
                         </div>
                     )}
@@ -838,7 +845,7 @@ export default function Board() {
                             <img
                                 src="/images/cards/bonding-card-deck.svg"
                                 alt="Bonding Card Deck"
-                                className="h-[235px] opacity-50"
+                                className={`h-[235px] ${activeCardStack === "compliment" || activeCardStack === "statement" ? "opacity-20" : ""}`}
                             />
                         </div>
                     )}
