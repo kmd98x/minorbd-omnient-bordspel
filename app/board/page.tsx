@@ -6,7 +6,7 @@ import { POSITIONS } from "@/data/circle-positions";
 import { useGame } from "@/contexts/GameContext";
 import Dice from "@/components/Dice";
 import GameRulesModal from "@/components/GameRulesModal";
-import CardModal from "@/components/CardModal";
+import CardStack from "@/components/CardStack";
 import { STATEMENTS, StatementCard } from "@/data/statements";
 import { COMPLIMENT_CARDS, ComplimentCard } from "@/data/compliments";
 import { BONDING_CARDS } from "@/data/bonding";
@@ -31,11 +31,8 @@ export default function Board() {
 	const [showRulesModal, setShowRulesModal] = useState(false);
 	const [showRestartModal, setShowRestartModal] = useState(false);
 	const [showEnjoyMessage, setShowEnjoyMessage] = useState(false);
-	const [showCardModal, setShowCardModal] = useState(false);
-	const [cardToShow, setCardToShow] = useState<{
-		type: "statement" | "compliment" | "bonding";
-		card: StatementCard | ComplimentCard | string;
-	} | null>(null);
+	const [activeCardStack, setActiveCardStack] = useState<"statement" | "compliment" | "bonding" | null>(null);
+	const [drawnCard, setDrawnCard] = useState<StatementCard | ComplimentCard | string | null>(null);
 
 	// Player colors
 	const playerColors: Record<number, string> = {
@@ -117,8 +114,8 @@ export default function Board() {
 				// Fill with white background at 80% opacity
 				ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
 				ctx.fill();
-				// Draw border
-				ctx.strokeStyle = "#737373"; // neutral-500 color
+				// Draw border - black border for all steps
+				ctx.strokeStyle = "#000000"; // black border
 				ctx.lineWidth = 1.5;
 				ctx.stroke();
 				
@@ -160,6 +157,8 @@ export default function Board() {
 			});
 
 			// Draw player pieces (pawns) - without border
+			// Group players by position to offset them when on the same square
+			const playersByPosition: Record<number, typeof players> = {};
 			players.forEach((player) => {
 				let displayPosition = player.position;
 
@@ -168,23 +167,49 @@ export default function Board() {
 					displayPosition = animatingPlayer.currentStep;
 				}
 
-				const position = POSITIONS.find((p) => p.number === displayPosition);
+				if (!playersByPosition[displayPosition]) {
+					playersByPosition[displayPosition] = [];
+				}
+				playersByPosition[displayPosition].push(player);
+			});
+
+			// Draw pawns with offset if multiple players on same position
+			const basePawnSize = 15; // Smaller pawns to show all when on same position
+			const currentPlayerInScope = players[currentPlayerIndex];
+			Object.entries(playersByPosition).forEach(([positionNum, playersAtPosition]) => {
+				const position = POSITIONS.find((p) => p.number === parseInt(positionNum));
 				if (!position) return;
 
-				const playerPawn = playerPawns.find((pp) => pp.playerId === player.id);
-				if (!playerPawn) return;
-
-				// Draw the pawn image
-				const pawnSize = 32;
 				const scaledX = position.x * scale;
 				const scaledY = position.y * scale;
-				ctx.drawImage(
-					playerPawn.img,
-					scaledX - pawnSize / 2,
-					scaledY - pawnSize / 2,
-					pawnSize,
-					pawnSize
-				);
+				const offsetRadius = 8; // Offset radius for multiple pawns
+				const angleStep = playersAtPosition.length > 1 ? (2 * Math.PI) / playersAtPosition.length : 0; // Angle between pawns
+
+				playersAtPosition.forEach((player, index) => {
+					const playerPawn = playerPawns.find((pp) => pp.playerId === player.id);
+					if (!playerPawn) return;
+
+					// Make current player's pawn larger
+					const isCurrentPlayer = currentPlayerInScope && currentPlayerInScope.id === player.id;
+					const pawnSize = isCurrentPlayer ? basePawnSize * 1.4 : basePawnSize; // 40% larger for current player
+
+					// Calculate offset position in a circle if multiple players
+					let offsetX = 0;
+					let offsetY = 0;
+					if (playersAtPosition.length > 1) {
+						const angle = index * angleStep;
+						offsetX = Math.cos(angle) * offsetRadius;
+						offsetY = Math.sin(angle) * offsetRadius;
+					}
+
+					ctx.drawImage(
+						playerPawn.img,
+						scaledX - pawnSize / 2 + offsetX,
+						scaledY - pawnSize / 2 + offsetY,
+						pawnSize,
+						pawnSize
+					);
+				});
 			});
 		});
 	}, [players, animatingPlayer]);
@@ -220,34 +245,130 @@ export default function Board() {
 		const scale = 0.9;
 		const scaledX = position.x * scale;
 		const scaledY = position.y * scale;
-		const pawnSize = 32;
+		const basePawnSize = 15; // Base pawn size for non-current players
+
+		// Calculate offset if multiple players on same position
+		const playersAtPosition = players.filter((p) => {
+			let pos = p.position;
+			if (animatingPlayer && animatingPlayer.playerId === p.id) {
+				pos = animatingPlayer.currentStep;
+			}
+			return pos === displayPosition;
+		});
+		
+		const offsetRadius = 8;
+		const angleStep = playersAtPosition.length > 1 ? (2 * Math.PI) / playersAtPosition.length : 0;
+		const currentPlayerIndexAtPosition = playersAtPosition.findIndex((p) => p.id === currentPlayerInScope.id);
+		let offsetX = 0;
+		let offsetY = 0;
+		if (playersAtPosition.length > 1 && currentPlayerIndexAtPosition !== -1) {
+			const angle = currentPlayerIndexAtPosition * angleStep;
+			offsetX = Math.cos(angle) * offsetRadius;
+			offsetY = Math.sin(angle) * offsetRadius;
+		}
 
 		// Only redraw if we need to show/hide the border and not animating
 		if (!animatingPlayer && (shouldShowBorder || (isCurrentPlayerTurn && borderVisible === false))) {
-			// Clear the area around the pawn
+			const radiusMultiplier = 1.3;
+			const scaledRadius = position.radius * scale * radiusMultiplier;
+			const currentPlayerPawnSize = basePawnSize * 1.4; // Larger size for current player
+			
+			// Clear the area around the step and pawn
+			const clearArea = Math.max(scaledRadius * 2, currentPlayerPawnSize + 16);
 			ctx.clearRect(
-				scaledX - pawnSize / 2 - 8,
-				scaledY - pawnSize / 2 - 8,
-				pawnSize + 16,
-				pawnSize + 16
+				scaledX - clearArea / 2,
+				scaledY - clearArea / 2,
+				clearArea,
+				clearArea
 			);
 
-			// Redraw the pawn
-			ctx.drawImage(
-				playerPawn.img,
-				scaledX - pawnSize / 2,
-				scaledY - pawnSize / 2,
-				pawnSize,
-				pawnSize
-			);
+			// Redraw the step circle with black border and 80% white background
+			ctx.save();
+			ctx.shadowBlur = 2.87;
+			ctx.shadowOffsetX = 0;
+			ctx.shadowOffsetY = 2.87;
+			ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+			
+			ctx.beginPath();
+			ctx.arc(scaledX, scaledY, scaledRadius, 0, 2 * Math.PI);
+			ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+			ctx.fill();
+			ctx.strokeStyle = "#000000"; // black border
+			ctx.lineWidth = 1.5;
+			ctx.stroke();
+			
+			ctx.shadowBlur = 0;
+			ctx.shadowOffsetX = 0;
+			ctx.shadowOffsetY = 0;
+			ctx.shadowColor = "transparent";
+			ctx.restore();
+
+			// Redraw position image if available
+			const positionIndex = POSITIONS.findIndex((p) => p.number === displayPosition);
+			if (positionIndex !== -1 && imagesRef.current.positionImages[positionIndex]?.img) {
+				const { img } = imagesRef.current.positionImages[positionIndex];
+				ctx.save();
+				ctx.beginPath();
+				ctx.arc(scaledX, scaledY, scaledRadius, 0, 2 * Math.PI);
+				ctx.clip();
+				const isBubble = position.image?.includes('bubble');
+				const isText = position.image?.includes('text');
+				let sizeMultiplier = 0.75;
+				if (isBubble) {
+					sizeMultiplier = 1.5;
+				} else if (isText) {
+					sizeMultiplier = 3.0;
+				}
+				const size = scaledRadius * sizeMultiplier;
+				ctx.drawImage(img, scaledX - size / 2, scaledY - size / 2, size, size);
+				ctx.restore();
+			}
+
+			// Redraw text if available
+			if (position.text.content !== "") {
+				ctx.save();
+				ctx.fillStyle = "#000000";
+				ctx.font = "12px Arial";
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				ctx.fillText(position.text.content, position.text.x * scale, position.text.y * scale);
+				ctx.restore();
+			}
+
+			// Redraw all pawns at this position (to handle multiple players)
+			playersAtPosition.forEach((player, index) => {
+				const playerPawnImg = imagesRef.current?.playerPawns.find((pp) => pp.playerId === player.id);
+				if (!playerPawnImg) return;
+
+				// Make current player's pawn larger
+				const isCurrentPlayer = currentPlayerInScope && currentPlayerInScope.id === player.id;
+				const playerPawnSize = isCurrentPlayer ? basePawnSize * 1.4 : basePawnSize; // 40% larger for current player
+
+				let pawnOffsetX = 0;
+				let pawnOffsetY = 0;
+				if (playersAtPosition.length > 1) {
+					const angle = index * angleStep;
+					pawnOffsetX = Math.cos(angle) * offsetRadius;
+					pawnOffsetY = Math.sin(angle) * offsetRadius;
+				}
+
+				ctx.drawImage(
+					playerPawnImg.img,
+					scaledX - playerPawnSize / 2 + pawnOffsetX,
+					scaledY - playerPawnSize / 2 + pawnOffsetY,
+					playerPawnSize,
+					playerPawnSize
+				);
+			});
 
 			// Draw border only if it's this player's turn and border should be visible
 			if (shouldShowBorder) {
+				const currentPlayerPawnSize = basePawnSize * 1.4; // Use larger size for current player's border
 				ctx.save();
-				ctx.strokeStyle = playerColors[currentPlayerInScope.id] || "#737373";
+				ctx.strokeStyle = "#1e3a8a"; // Dark blue border
 				ctx.lineWidth = 3;
 				ctx.beginPath();
-				ctx.arc(scaledX, scaledY, pawnSize / 2 + 3, 0, 2 * Math.PI);
+				ctx.arc(scaledX + offsetX, scaledY + offsetY, currentPlayerPawnSize / 2 + 3, 0, 2 * Math.PI);
 				ctx.stroke();
 				ctx.restore();
 			}
@@ -344,19 +465,6 @@ export default function Board() {
 		};
 	}, [animatingPlayer]);
 
-	// Get random card from deck
-	const getRandomCard = (type: "statement" | "compliment" | "bonding") => {
-		if (type === "statement") {
-			const randomIndex = Math.floor(Math.random() * STATEMENTS.length);
-			return STATEMENTS[randomIndex];
-		} else if (type === "compliment") {
-			const randomIndex = Math.floor(Math.random() * COMPLIMENT_CARDS.length);
-			return COMPLIMENT_CARDS[randomIndex];
-		} else {
-			const randomIndex = Math.floor(Math.random() * BONDING_CARDS.length);
-			return BONDING_CARDS[randomIndex];
-		}
-	};
 
 	// Handle special actions and card drawing
 	const handlePositionAction = (playerId: number, position: number): boolean => {
@@ -407,12 +515,10 @@ export default function Board() {
 			cardType = "statement";
 		}
 
-		// Show card modal if card should be drawn
+		// Activate card stack if card should be drawn
 		if (cardType) {
-			const card = getRandomCard(cardType);
-			setCardToShow({ type: cardType, card });
-			setShowCardModal(true);
-			return true; // Card will be shown
+			setActiveCardStack(cardType);
+			return true; // Card stack will be activated
 		}
 
 		return false; // No card to show
@@ -453,8 +559,8 @@ export default function Board() {
 		}
 	};
 
-	// Handle drop on player deck
-	const handleDrop = (e: React.DragEvent, playerId: number) => {
+	// Handle drop on player deck category
+	const handleDrop = (e: React.DragEvent, playerId: number, category: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong") => {
 		e.preventDefault();
 		
 		// Only allow drop on current player's deck
@@ -464,12 +570,24 @@ export default function Board() {
 		if (cardData) {
 			try {
 				const card: StatementCard = JSON.parse(cardData);
-				addCardToPlayer(playerId, card);
-				setShowCardModal(false);
+				addCardToPlayer(playerId, card, category);
+				setDrawnCard(null);
+				setActiveCardStack(null);
 				handleCardDrawn();
 			} catch (error) {
 				console.error("Error parsing card data:", error);
 			}
+		}
+	};
+
+	// Handle card drawn from stack
+	const handleCardDrawnFromStack = (card: StatementCard | ComplimentCard | string) => {
+		if (activeCardStack === "statement") {
+			setDrawnCard(card as StatementCard);
+		} else {
+			// For compliment and bonding, just close and move to next player
+			setActiveCardStack(null);
+			handleCardDrawn();
 		}
 	};
 
@@ -517,27 +635,46 @@ export default function Board() {
                         currentPlayer?.id === 1 && borderVisible && isCurrentPlayerTurn
                             ? 'border-4'
                             : 'border-4 border-transparent'
-                    } ${currentPlayer?.id === 1 ? 'bg-neutral-50/50' : ''}`}
+                            }`}
                     id="player-1"
                     style={{
                         borderColor: currentPlayer?.id === 1 && borderVisible && isCurrentPlayerTurn 
                             ? 'var(--color-button-hover)' 
                             : 'transparent'
                     }}
-                    onDrop={(e) => handleDrop(e, 1)}
                     onDragOver={handleDragOver}
                 >
-                    {player1.cards.length > 0 ? (
-                        player1.cards.map((card, index) => (
-                            <div key={index} className="flex-1 bg-white rounded-lg p-4 border-2 border-button-hover mx-2 max-h-[235px] overflow-y-auto">
-                                <p className="text-sm font-medium text-neutral-800">{card.text}</p>
+                    {cardLabels.map((label, index) => {
+                        const category = label as "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong";
+                        const cards = player1.cards[category];
+                        return (
+                            <div
+                                key={index}
+                                onDrop={(e) => handleDrop(e, 1, category)}
+                                onDragOver={handleDragOver}
+                                className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all ${
+                                    currentPlayer?.id === 1 && activeCardStack === "statement"
+                                        ? "border-button-hover"
+                                        : "border-transparent"
+                                }`}
+                            >
+                                <img 
+                                    src={cardImages[index]} 
+                                    alt={label} 
+                                    className="h-auto object-contain w-full max-h-[400px] mb-2" 
+                                />
+                                {cards.length > 0 && (
+                                    <div className="mt-2 space-y-1 w-full px-2">
+                                        {cards.map((card, cardIndex) => (
+                                            <div key={cardIndex} className="rounded p-2 border border-button-hover text-xs">
+                                                <p className="text-neutral-800 line-clamp-2">{card.text}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                        ))
-                    ) : (
-                        cardImages.map((image, index) => (
-                            <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
-                        ))
-                    )}
+                        );
+                    })}
                 </div>
             )}
 
@@ -550,27 +687,46 @@ export default function Board() {
                                 currentPlayer?.id === 4 && borderVisible && isCurrentPlayerTurn
                                     ? 'border-4'
                                     : 'border-4 border-transparent'
-                            } ${currentPlayer?.id === 4 ? 'bg-neutral-50/50' : ''}`}
+                            }`}
                             id="player-4"
                             style={{
                                 borderColor: currentPlayer?.id === 4 && borderVisible && isCurrentPlayerTurn 
                                     ? 'var(--color-button-hover)' 
                                     : 'transparent'
                             }}
-                            onDrop={(e) => handleDrop(e, 4)}
                             onDragOver={handleDragOver}
                         >
-                            {player4.cards.length > 0 ? (
-                                player4.cards.map((card, index) => (
-                                    <div key={index} className="flex-1 bg-white rounded-lg p-4 border-2 border-button-hover mx-2 max-h-[235px] overflow-y-auto">
-                                        <p className="text-sm font-medium text-neutral-800">{card.text}</p>
+                            {cardLabels.map((label, index) => {
+                                const category = label as "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong";
+                                const cards = player4.cards[category];
+                                return (
+                                    <div
+                                        key={index}
+                                        onDrop={(e) => handleDrop(e, 4, category)}
+                                        onDragOver={handleDragOver}
+                                        className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all ${
+                                            currentPlayer?.id === 4 && activeCardStack === "statement"
+                                                ? "border-button-hover"
+                                                : "border-transparent"
+                                        }`}
+                                    >
+                                        <img 
+                                            src={cardImages[index]} 
+                                            alt={label} 
+                                            className="h-auto object-contain w-full max-h-[400px] mb-2" 
+                                        />
+                                        {cards.length > 0 && (
+                                            <div className="mt-2 space-y-1 w-full px-2">
+                                                {cards.map((card, cardIndex) => (
+                                                    <div key={cardIndex} className="bg-white rounded p-2 border border-button-hover text-xs">
+                                                        <p className="text-neutral-800 line-clamp-2">{card.text}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
-                                ))
-                            ) : (
-                                cardImages.map((image, index) => (
-                                    <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
-                                ))
-                            )}
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -640,31 +796,52 @@ export default function Board() {
 
                     {/* Card Decks */}
                     {/* Compliments Card Deck - Right Top */}
-                    <div className="absolute right-[380px] top-6">
-                        <img
-                            src="/images/cards/compliment-card-deck.svg"
-                            alt="Compliments Card Deck"
-                            className="h-[235px]"
-                        />
-                    </div>
+                    {activeCardStack === "compliment" && (
+                        <div className="absolute right-[380px] top-6 z-20">
+                            <CardStack type="compliment" onCardDrawn={handleCardDrawnFromStack} />
+                        </div>
+                    )}
+                    {activeCardStack !== "compliment" && (
+                        <div className="absolute right-[380px] top-6">
+                            <img
+                                src="/images/cards/compliment-card-deck.svg"
+                                alt="Compliments Card Deck"
+                                className="h-[235px] opacity-50"
+                            />
+                        </div>
+                    )}
 
                     {/* Statement Card Deck - Left Middle */}
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2">
-                        <img
-                            src="/images/cards/statement-card-deck.svg"
-                            alt="Statement Card Deck"
-                            className="h-[175px]"
-                        />
-                    </div>
+                    {activeCardStack === "statement" && (
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 z-20">
+                            <CardStack type="statement" onCardDrawn={handleCardDrawnFromStack} />
+                        </div>
+                    )}
+                    {activeCardStack !== "statement" && (
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                            <img
+                                src="/images/cards/statement-card-deck.svg"
+                                alt="Statement Card Deck"
+                                className="h-[175px] opacity-50"
+                            />
+                        </div>
+                    )}
 
                     {/* Bonding Card Deck - Right Bottom */}
-                    <div className="absolute right-[200px] bottom-[230px]">
-                        <img
-                            src="/images/cards/bonding-card-deck.svg"
-                            alt="Bonding Card Deck"
-                            className="h-[235px]"
-                        />
-                    </div>
+                    {activeCardStack === "bonding" && (
+                        <div className="absolute right-[200px] bottom-[230px] z-20">
+                            <CardStack type="bonding" onCardDrawn={handleCardDrawnFromStack} />
+                        </div>
+                    )}
+                    {activeCardStack !== "bonding" && (
+                        <div className="absolute right-[200px] bottom-[230px]">
+                            <img
+                                src="/images/cards/bonding-card-deck.svg"
+                                alt="Bonding Card Deck"
+                                className="h-[235px] opacity-50"
+                            />
+                        </div>
+                    )}
                     
 
                     {/* Game Rules Modal */}
@@ -748,7 +925,7 @@ export default function Board() {
                                             setShowRestartModal(false);
                                             router.push("/deelnemers");
                                         }}
-                                        className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg transition-colors font-semibold"
+                                        className="flex-1 bg-button hover:bg-button-hover text-white px-6 py-3 rounded-lg transition-colors font-semibold"
                                     >
                                         Ja
                                     </button>
@@ -778,27 +955,6 @@ export default function Board() {
                         </div>
                     )}
 
-                    {/* Card Modal */}
-                    {cardToShow && (
-                        <CardModal
-                            isOpen={showCardModal}
-                            onClose={() => {
-                                setShowCardModal(false);
-                                handleCardDrawn();
-                            }}
-                            cardType={cardToShow.type}
-                            card={cardToShow.card}
-                            onCardDrawn={handleCardDrawn}
-                            onCardDropped={(card) => {
-                                if (currentPlayer) {
-                                    addCardToPlayer(currentPlayer.id, card);
-                                    setShowCardModal(false);
-                                    handleCardDrawn();
-                                }
-                            }}
-                            currentPlayerId={currentPlayer?.id}
-                        />
-                    )}
                 </div>
 
                 {/* Player 3 - Right */}
@@ -809,27 +965,46 @@ export default function Board() {
                                 currentPlayer?.id === 3 && borderVisible && isCurrentPlayerTurn
                                     ? 'border-4'
                                     : 'border-4 border-transparent'
-                            } ${currentPlayer?.id === 3 ? 'bg-neutral-50/50' : ''}`}
+                            }`}
                             id="player-3"
                             style={{
                                 borderColor: currentPlayer?.id === 3 && borderVisible && isCurrentPlayerTurn 
                                     ? 'var(--color-button-hover)' 
                                     : 'transparent'
                             }}
-                            onDrop={(e) => handleDrop(e, 3)}
                             onDragOver={handleDragOver}
                         >
-                            {player3.cards.length > 0 ? (
-                                player3.cards.map((card, index) => (
-                                    <div key={index} className="flex-1 bg-white rounded-lg p-4 border-2 border-button-hover mx-2 max-h-[235px] overflow-y-auto">
-                                        <p className="text-sm font-medium text-neutral-800">{card.text}</p>
+                            {cardLabels.map((label, index) => {
+                                const category = label as "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong";
+                                const cards = player3.cards[category];
+                                return (
+                                    <div
+                                        key={index}
+                                        onDrop={(e) => handleDrop(e, 3, category)}
+                                        onDragOver={handleDragOver}
+                                        className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all ${
+                                            currentPlayer?.id === 3 && activeCardStack === "statement"
+                                                ? "border-button-hover"
+                                                : "border-transparent"
+                                        }`}
+                                    >
+                                        <img 
+                                            src={cardImages[index]} 
+                                            alt={label} 
+                                            className="h-auto object-contain w-full max-h-[400px] mb-2" 
+                                        />
+                                        {cards.length > 0 && (
+                                            <div className="mt-2 space-y-1 w-full px-2">
+                                                {cards.map((card, cardIndex) => (
+                                                    <div key={cardIndex} className="bg-white rounded p-2 border border-button-hover text-xs">
+                                                        <p className="text-neutral-800 line-clamp-2">{card.text}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
-                                ))
-                            ) : (
-                                cardImages.map((image, index) => (
-                                    <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
-                                ))
-                            )}
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -842,27 +1017,46 @@ export default function Board() {
                         currentPlayer?.id === 2 && borderVisible && isCurrentPlayerTurn
                             ? 'border-4'
                             : 'border-4 border-transparent'
-                    } ${currentPlayer?.id === 2 ? 'bg-neutral-50/50' : ''}`}
+                            }`}
                     id="player-2"
                     style={{
                         borderColor: currentPlayer?.id === 2 && borderVisible && isCurrentPlayerTurn 
                             ? 'var(--color-button-hover)' 
                             : 'transparent'
                     }}
-                    onDrop={(e) => handleDrop(e, 2)}
                     onDragOver={handleDragOver}
                 >
-                    {player2.cards.length > 0 ? (
-                        player2.cards.map((card, index) => (
-                            <div key={index} className="flex-1 bg-white rounded-lg p-4 border-2 border-button-hover mx-2 max-h-[235px] overflow-y-auto">
-                                <p className="text-sm font-medium text-neutral-800">{card.text}</p>
+                    {cardLabels.map((label, index) => {
+                        const category = label as "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong";
+                        const cards = player2.cards[category];
+                        return (
+                            <div
+                                key={index}
+                                onDrop={(e) => handleDrop(e, 2, category)}
+                                onDragOver={handleDragOver}
+                                className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all ${
+                                    currentPlayer?.id === 2 && activeCardStack === "statement"
+                                        ? "border-button-hover"
+                                        : "border-transparent"
+                                }`}
+                            >
+                                <img 
+                                    src={cardImages[index]} 
+                                    alt={label} 
+                                    className="h-auto object-contain w-full max-h-[400px] mb-2" 
+                                />
+                                {cards.length > 0 && (
+                                    <div className="mt-2 space-y-1 w-full px-2">
+                                        {cards.map((card, cardIndex) => (
+                                            <div key={cardIndex} className="rounded p-2 border border-button-hover text-xs">
+                                                <p className="text-neutral-800 line-clamp-2">{card.text}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                        ))
-                    ) : (
-                        cardImages.map((image, index) => (
-                            <img key={index} src={image} alt={cardLabels[index]} className="flex-1 h-auto object-contain max-h-[235px]" />
-                        ))
-                    )}
+                        );
+                    })}
                 </div>
             )}
         </div>

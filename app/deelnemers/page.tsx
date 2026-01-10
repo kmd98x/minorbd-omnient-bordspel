@@ -56,7 +56,13 @@ export default function Deelnemers() {
 			name: setup.name.trim(),
 			icon: defaultIcons[originalIndex] || "/images/boek.svg",
 			position: 1,
-			cards: [],
+			cards: {
+				"Be perfect": [],
+				"Try hard": [],
+				"Pleaser": [],
+				"Hurry up": [],
+				"Be strong": [],
+			},
 		}));
 
 		setPlayers(players);

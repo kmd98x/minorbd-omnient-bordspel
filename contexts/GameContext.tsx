@@ -8,7 +8,13 @@ export type Player = {
 	name: string;
 	icon: string;
 	position: number; // Position on the board (1-39)
-	cards: StatementCard[]; // Cards in player's deck
+	cards: {
+		"Be perfect": StatementCard[];
+		"Try hard": StatementCard[];
+		"Pleaser": StatementCard[];
+		"Hurry up": StatementCard[];
+		"Be strong": StatementCard[];
+	};
 };
 
 type GameContextType = {
@@ -17,7 +23,7 @@ type GameContextType = {
 	updatePlayerPosition: (playerId: number, newPosition: number) => void;
 	addPlayer: (name: string, icon: string) => void;
 	removePlayer: (playerId: number) => void;
-	addCardToPlayer: (playerId: number, card: StatementCard) => void;
+	addCardToPlayer: (playerId: number, card: StatementCard, category: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong") => void;
 	currentPlayerIndex: number;
 	setCurrentPlayerIndex: (index: number) => void;
 };
@@ -44,16 +50,22 @@ export function GameProvider({ children }: { children: ReactNode }) {
 			name,
 			icon,
 			position: 1, // Start at position 1 (START)
-			cards: [], // Initialize empty cards array
+			cards: {
+				"Be perfect": [],
+				"Try hard": [],
+				"Pleaser": [],
+				"Hurry up": [],
+				"Be strong": [],
+			},
 		};
 		setPlayers((prevPlayers) => [...prevPlayers, newPlayer]);
 	};
 
-	const addCardToPlayer = (playerId: number, card: StatementCard) => {
+	const addCardToPlayer = (playerId: number, card: StatementCard, category: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong") => {
 		setPlayers((prevPlayers) =>
 			prevPlayers.map((player) =>
 				player.id === playerId
-					? { ...player, cards: [...player.cards, card] }
+					? { ...player, cards: { ...player.cards, [category]: [...player.cards[category], card] } }
 					: player
 			)
 		);
