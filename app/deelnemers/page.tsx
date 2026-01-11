@@ -12,7 +12,7 @@ type PlayerSetup = {
 
 export default function Deelnemers() {
     const router = useRouter();
-	const { setPlayers } = useGame();
+	const { setPlayers, setCurrentPlayerIndex } = useGame();
 	const [ displayPopup, setDisplayPopup ] = useState(false);
 	const [playerSetups, setPlayerSetups] = useState<PlayerSetup[]>([
 		{ name: "", icon: "" },
@@ -66,6 +66,7 @@ export default function Deelnemers() {
 		}));
 
 		setPlayers(players);
+		setCurrentPlayerIndex(0); // Start altijd bij speler 1 (index 0)
 		router.push("/board");
 	};
 

@@ -7,16 +7,21 @@ import { useGame } from "@/contexts/GameContext";
 import Dice from "@/components/Dice";
 import GameRulesModal from "@/components/GameRulesModal";
 import CardStack from "@/components/CardStack";
+import PlayerCardStack from "@/components/PlayerCardStack";
+import Card from "@/components/Card";
 import { STATEMENTS, StatementCard } from "@/data/statements";
 import { COMPLIMENT_CARDS, ComplimentCard } from "@/data/compliments";
 import { BONDING_CARDS } from "@/data/bonding";
 
+const FINISH_POSITION = 39;
+
 export default function Board() {
 	const router = useRouter();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const { players, currentPlayerIndex, updatePlayerPosition, setCurrentPlayerIndex, addCardToPlayer } = useGame();
+	const { players, currentPlayerIndex, updatePlayerPosition, setCurrentPlayerIndex, addCardToPlayer, moveCardBetweenCategories } = useGame();
 	const [diceValue, setDiceValue] = useState<number | null>(null);
 	const [isRolling, setIsRolling] = useState(false);
+	const [hasRolledThisTurn, setHasRolledThisTurn] = useState(false);
 	const [animatingPlayer, setAnimatingPlayer] = useState<{
 		playerId: number;
 		currentStep: number;
@@ -31,8 +36,83 @@ export default function Board() {
 	const [showRulesModal, setShowRulesModal] = useState(false);
 	const [showRestartModal, setShowRestartModal] = useState(false);
 	const [showEnjoyMessage, setShowEnjoyMessage] = useState(false);
+	const [showFinishModal, setShowFinishModal] = useState(false);
 	const [activeCardStack, setActiveCardStack] = useState<"statement" | "compliment" | "bonding" | null>(null);
 	const [drawnCard, setDrawnCard] = useState<StatementCard | ComplimentCard | string | null>(null);
+	const [draggedCard, setDraggedCard] = useState<{ card: StatementCard; sourceCategory: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong" } | null>(null);
+
+	// Handle card drag start from PlayerCardStack
+	const handleCardDragStart = (e: React.DragEvent, card: StatementCard, sourceCategory: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong") => {
+		if (!currentPlayer) return;
+		
+		// Set drag data
+		e.dataTransfer.setData("application/json", JSON.stringify(card));
+		e.dataTransfer.setData("source-category", sourceCategory);
+		e.dataTransfer.effectAllowed = "move";
+		
+		// Store dragged card for preview
+		setDraggedCard({ card, sourceCategory });
+		
+		// Create custom drag image
+		const dragImage = document.createElement("div");
+		dragImage.style.position = "absolute";
+		dragImage.style.top = "-1000px";
+		dragImage.style.left = "-1000px";
+		dragImage.style.width = "320px";
+		dragImage.style.height = "480px";
+		dragImage.style.background = `url('/images/cards/stelling-card-bg.png')`;
+		dragImage.style.backgroundSize = "cover";
+		dragImage.style.padding = "12px";
+		dragImage.style.borderRadius = "16px";
+		dragImage.style.opacity = "0.9";
+		
+		const innerDiv = document.createElement("div");
+		innerDiv.style.background = "white";
+		innerDiv.style.borderRadius = "8px";
+		innerDiv.style.padding = "16px";
+		innerDiv.style.height = "100%";
+		innerDiv.style.display = "flex";
+		innerDiv.style.flexDirection = "column";
+		innerDiv.style.alignItems = "center";
+		innerDiv.style.justifyContent = "center";
+		innerDiv.style.gap = "20px";
+		
+		if (card.hasQuestion) {
+			const title = document.createElement("p");
+			title.style.fontWeight = "bold";
+			title.style.textAlign = "center";
+			title.style.fontSize = "20px";
+			title.style.marginBottom = "12px";
+			title.textContent = "Herken je de uitspraak?";
+			innerDiv.appendChild(title);
+		}
+		
+		const text = document.createElement("p");
+		text.style.textAlign = "center";
+		text.style.fontSize = "18px";
+		text.textContent = card.text;
+		innerDiv.appendChild(text);
+		
+		dragImage.appendChild(innerDiv);
+		document.body.appendChild(dragImage);
+		
+		// Set custom drag image
+		e.dataTransfer.setDragImage(dragImage, 160, 240);
+		
+		// Clean up after a short delay
+		setTimeout(() => {
+			if (document.body.contains(dragImage)) {
+				document.body.removeChild(dragImage);
+			}
+		}, 0);
+	};
+
+	// Redirect to /deelnemers if no players
+	useEffect(() => {
+		if (players.length === 0) {
+			router.push('/deelnemers');
+		}
+	}, [players, router]);
 
 	// Player colors
 	const playerColors: Record<number, string> = {
@@ -392,7 +472,8 @@ export default function Board() {
 
 	// Get current player
 	const currentPlayer = players[currentPlayerIndex];
-	const isCurrentPlayerTurn = currentPlayer && !isRolling && !animatingPlayer;
+	const isCurrentPlayerAtFinish = currentPlayer?.position >= FINISH_POSITION;
+	const isCurrentPlayerTurn = currentPlayer && !isRolling && !animatingPlayer && !isCurrentPlayerAtFinish;
 	const currentPlayerColor = currentPlayer ? playerColors[currentPlayer.id] : "#737373";
 
 	// Blink border when player's turn
@@ -411,6 +492,46 @@ export default function Board() {
 			clearInterval(blinkInterval);
 		};
 	}, [isCurrentPlayerTurn]);
+
+	// Reset hasRolledThisTurn when turn changes
+	useEffect(() => {
+		setHasRolledThisTurn(false);
+	}, [currentPlayerIndex]);
+
+
+	// Check if all players are at finish and skip players at finish when turn changes
+	useEffect(() => {
+		if (players.length === 0) return;
+		
+		// Check if all players are at finish
+		const allAtFinish = players.every(player => player.position >= FINISH_POSITION);
+		if (allAtFinish) {
+			setShowFinishModal(true);
+			return;
+		}
+		
+		// Skip current player if at finish
+		const currentPlayer = players[currentPlayerIndex];
+		if (currentPlayer && currentPlayer.position >= FINISH_POSITION) {
+			// Find next player not at finish
+			let nextIndex: number | null = null;
+			for (let i = 0; i < players.length; i++) {
+				const index = (currentPlayerIndex + 1 + i) % players.length;
+				const player = players[index];
+				if (player.position < FINISH_POSITION) {
+					nextIndex = index;
+					break;
+				}
+			}
+			
+			if (nextIndex !== null && nextIndex !== currentPlayerIndex) {
+				// Only update if different to avoid infinite loop
+				setCurrentPlayerIndex(nextIndex);
+			} else if (nextIndex === null) {
+				setShowFinishModal(true);
+			}
+		}
+	}, [currentPlayerIndex, players, setCurrentPlayerIndex]);
 
 	// Scroll to current player's deck when turn changes
 	useEffect(() => {
@@ -540,8 +661,23 @@ export default function Board() {
 		if (!shouldShowCard) {
 			const currentPlayerIdx = players.findIndex(p => p.id === playerId);
 			if (currentPlayerIdx !== -1) {
-				const nextIndex = (currentPlayerIdx + 1) % players.length;
-				setCurrentPlayerIndex(nextIndex);
+				// Find next player not at finish
+				let nextIndex: number | null = null;
+				for (let i = 0; i < players.length; i++) {
+					const index = (currentPlayerIdx + 1 + i) % players.length;
+					const player = players[index];
+					if (player.position < FINISH_POSITION) {
+						nextIndex = index;
+						break;
+					}
+				}
+				
+				if (nextIndex !== null) {
+					setCurrentPlayerIndex(nextIndex);
+				} else {
+					// All players at finish
+					setShowFinishModal(true);
+				}
 			}
 		}
 		
@@ -549,13 +685,29 @@ export default function Board() {
 		setAnimationComplete(null);
 	}, [animationComplete, updatePlayerPosition, setCurrentPlayerIndex, players]);
 
+
 	// Move to next player after card is drawn
 	const handleCardDrawn = () => {
 		// Find current player and move to next
 		const currentPlayerIdx = players.findIndex(p => p.id === currentPlayer?.id);
 		if (currentPlayerIdx !== -1) {
-			const nextIndex = (currentPlayerIdx + 1) % players.length;
-			setCurrentPlayerIndex(nextIndex);
+			// Find next player not at finish
+			let nextIndex: number | null = null;
+			for (let i = 0; i < players.length; i++) {
+				const index = (currentPlayerIdx + 1 + i) % players.length;
+				const player = players[index];
+				if (player.position < FINISH_POSITION) {
+					nextIndex = index;
+					break;
+				}
+			}
+			
+			if (nextIndex !== null) {
+				setCurrentPlayerIndex(nextIndex);
+			} else {
+				// All players at finish
+				setShowFinishModal(true);
+			}
 		}
 	};
 
@@ -567,17 +719,36 @@ export default function Board() {
 		if (playerId !== currentPlayer?.id) return;
 
 		const cardData = e.dataTransfer.getData("application/json");
+		const sourceCategory = e.dataTransfer.getData("source-category");
+		
 		if (cardData) {
 			try {
 				const card: StatementCard = JSON.parse(cardData);
-				addCardToPlayer(playerId, card, category);
-				setDrawnCard(null);
-				setActiveCardStack(null);
-				handleCardDrawn();
+				
+				// If source category is provided, this is a move between categories
+				if (sourceCategory) {
+					const sourceCat = sourceCategory as "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong";
+					// Only move if source and target are different
+					if (sourceCat !== category) {
+						moveCardBetweenCategories(playerId, card, sourceCat, category);
+					}
+					setDraggedCard(null);
+				} else {
+					// Otherwise, it's a new card from the stack
+					addCardToPlayer(playerId, card, category);
+					setDrawnCard(null);
+					setActiveCardStack(null);
+					handleCardDrawn();
+				}
 			} catch (error) {
 				console.error("Error parsing card data:", error);
 			}
 		}
+	};
+
+	// Handle card drag end
+	const handleCardDragEnd = () => {
+		setDraggedCard(null);
 	};
 
 	// Handle card drawn from stack
@@ -623,6 +794,7 @@ export default function Board() {
 	// Called when dice starts rolling
 	const handleDiceRollStart = () => {
 		setIsRolling(true);
+		setHasRolledThisTurn(true);
 	};
 
 	return (
@@ -659,7 +831,7 @@ export default function Board() {
                                 key={index}
                                 onDrop={(e) => handleDrop(e, 1, category)}
                                 onDragOver={handleDragOver}
-                                className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all ${
+                                className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all relative ${
                                     currentPlayer?.id === 1 && activeCardStack === "statement"
                                         ? "border-button-hover"
                                         : "border-transparent"
@@ -670,15 +842,9 @@ export default function Board() {
                                     alt={label} 
                                     className="h-auto object-contain w-full max-h-[400px] mb-2" 
                                 />
-                                {cards.length > 0 && (
-                                    <div className="mt-2 space-y-1 w-full px-2">
-                                        {cards.map((card, cardIndex) => (
-                                            <div key={cardIndex} className="rounded p-2 border border-button-hover text-xs">
-                                                <p className="text-neutral-800 line-clamp-2">{card.text}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center z-10" style={{ transform: 'translateY(-10%)' }}>
+                                    <PlayerCardStack cards={cards} playerId={1} category={category} onDragStart={handleCardDragStart} onDragEnd={handleCardDragEnd} />
+                                </div>
                             </div>
                         );
                     })}
@@ -711,7 +877,7 @@ export default function Board() {
                                         key={index}
                                         onDrop={(e) => handleDrop(e, 4, category)}
                                         onDragOver={handleDragOver}
-                                        className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all ${
+                                        className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all relative ${
                                             currentPlayer?.id === 4 && activeCardStack === "statement"
                                                 ? "border-button-hover"
                                                 : "border-transparent"
@@ -722,15 +888,9 @@ export default function Board() {
                                             alt={label} 
                                             className="h-auto object-contain w-full max-h-[400px] mb-2" 
                                         />
-                                        {cards.length > 0 && (
-                                            <div className="mt-2 space-y-1 w-full px-2">
-                                                {cards.map((card, cardIndex) => (
-                                                    <div key={cardIndex} className="bg-white rounded p-2 border border-button-hover text-xs">
-                                                        <p className="text-neutral-800 line-clamp-2">{card.text}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center z-10" style={{ transform: 'translateY(-10%)' }}>
+                                            <PlayerCardStack cards={cards} playerId={4} category={category} onDragStart={handleCardDragStart} onDragEnd={handleCardDragEnd} />
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -747,8 +907,8 @@ export default function Board() {
                     
                     {/* Player 1 - Top (inside) */}
                     {player1 && (
-                        <div className="absolute top-0 left-1/2 -translate-x-1/2">
-                            <h2 className="text-lg font-semibold text-center text-neutral-800 flex items-center justify-center gap-2">
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 -mt-10">
+                            <h2 className="text-lg font-semibold text-center text-neutral-800 flex items-center justify-center gap-2 scale-[1.5]">
                                 <img
                                     src="/images/player-1.svg"
                                     alt="Speler 1"
@@ -759,10 +919,10 @@ export default function Board() {
                         </div>
                     )}
 
-                    {/* Player 2 - Bottom (inside) */}
+                    {/* Player 2 - Right (inside) */}
                     {player2 && (
-                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
-                            <h2 className="text-lg font-semibold text-center text-neutral-800 flex items-center justify-center gap-2">
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 rotate-90 origin-center">
+                            <h2 className="text-lg font-semibold text-center text-neutral-800 whitespace-nowrap flex items-center justify-center gap-2">
                                 <img
                                     src="/images/player-2.svg"
                                     alt="Speler 2"
@@ -773,10 +933,10 @@ export default function Board() {
                         </div>
                     )}
 
-                    {/* Player 3 - Right (inside) */}
+                    {/* Player 3 - Bottom (inside) */}
                     {player3 && (
-                        <div className="absolute right-0 top-1/2 -translate-y-1/2 rotate-90 origin-center">
-                            <h2 className="text-lg font-semibold text-center text-neutral-800 whitespace-nowrap flex items-center justify-center gap-2">
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
+                            <h2 className="text-lg font-semibold text-center text-neutral-800 flex items-center justify-center gap-2">
                                 <img
                                     src="/images/player-3.svg"
                                     alt="Speler 3"
@@ -869,7 +1029,7 @@ export default function Board() {
                                 size={50} 
                                 onRoll={handleDiceRoll}
                                 onRollStart={handleDiceRollStart}
-                                disabled={!isCurrentPlayerTurn || isRolling}
+                                disabled={!isCurrentPlayerTurn || isRolling || hasRolledThisTurn}
                             />
                         </div>
                     </div>
@@ -962,20 +1122,52 @@ export default function Board() {
                         </div>
                     )}
 
+                    {/* Finish Modal */}
+                    {showFinishModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+                                <h2 className="text-2xl font-bold text-center mb-6 text-button-hover">
+                                    Klaar! Tijd voor het reflectie vel!
+                                </h2>
+                                <button
+                                    onClick={() => {
+                                        router.push("/reflectie");
+                                    }}
+                                    className="w-full bg-button hover:bg-button-hover text-white px-6 py-3 rounded-lg transition-colors font-semibold text-lg"
+                                >
+                                    Naar de reflectie
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Dragged Card Preview */}
+                    {draggedCard && (
+                        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+                            <div className="opacity-80">
+                                <Card
+                                    type="stelling"
+                                    cardTitle={draggedCard.card.hasQuestion ? "Herken je de uitspraak?" : ""}
+                                    cardStatement={draggedCard.card.text}
+                                />
+                            </div>
+                        </div>
+                    )}
+
                 </div>
 
-                {/* Player 3 - Right */}
-                {player3 && (
+                {/* Player 2 - Right */}
+                {player2 && (
                     <div className="absolute right-[-640px] top-1/2 -translate-y-1/2 flex flex-col items-center rotate-90 origin-center">
                         <div 
                             className={`flex items-center justify-between w-[900px] p-5 rounded-2xl transition-all ${
-                                currentPlayer?.id === 3 && borderVisible && isCurrentPlayerTurn
+                                currentPlayer?.id === 2 && borderVisible && isCurrentPlayerTurn
                                     ? 'border-4'
                                     : 'border-4 border-transparent'
                             }`}
-                            id="player-3"
+                            id="player-2"
                             style={{
-                                borderColor: currentPlayer?.id === 3 && borderVisible && isCurrentPlayerTurn 
+                                borderColor: currentPlayer?.id === 2 && borderVisible && isCurrentPlayerTurn 
                                     ? 'var(--color-button-hover)' 
                                     : 'transparent'
                             }}
@@ -983,14 +1175,14 @@ export default function Board() {
                         >
                             {cardLabels.map((label, index) => {
                                 const category = label as "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong";
-                                const cards = player3.cards[category];
+                                const cards = player2.cards[category];
                                 return (
                                     <div
                                         key={index}
-                                        onDrop={(e) => handleDrop(e, 3, category)}
+                                        onDrop={(e) => handleDrop(e, 2, category)}
                                         onDragOver={handleDragOver}
-                                        className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all ${
-                                            currentPlayer?.id === 3 && activeCardStack === "statement"
+                                        className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all relative ${
+                                            currentPlayer?.id === 2 && activeCardStack === "statement"
                                                 ? "border-button-hover"
                                                 : "border-transparent"
                                         }`}
@@ -1000,15 +1192,9 @@ export default function Board() {
                                             alt={label} 
                                             className="h-auto object-contain w-full max-h-[400px] mb-2" 
                                         />
-                                        {cards.length > 0 && (
-                                            <div className="mt-2 space-y-1 w-full px-2">
-                                                {cards.map((card, cardIndex) => (
-                                                    <div key={cardIndex} className="bg-white rounded p-2 border border-button-hover text-xs">
-                                                        <p className="text-neutral-800 line-clamp-2">{card.text}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center z-10" style={{ transform: 'translateY(-10%)' }}>
+                                            <PlayerCardStack cards={cards} playerId={2} category={category} onDragStart={handleCardDragStart} onDragEnd={handleCardDragEnd} />
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -1017,17 +1203,17 @@ export default function Board() {
                 )}
             </div>
 
-            {/* Player 2 - Bottom */}
-            {player2 && (
+            {/* Player 3 - Bottom */}
+            {player3 && (
                 <div 
                     className={`flex items-center justify-between w-[900px] mt-8 p-5 rounded-2xl transition-all ${
-                        currentPlayer?.id === 2 && borderVisible && isCurrentPlayerTurn
+                        currentPlayer?.id === 3 && borderVisible && isCurrentPlayerTurn
                             ? 'border-4'
                             : 'border-4 border-transparent'
                             }`}
-                    id="player-2"
+                    id="player-3"
                     style={{
-                        borderColor: currentPlayer?.id === 2 && borderVisible && isCurrentPlayerTurn 
+                        borderColor: currentPlayer?.id === 3 && borderVisible && isCurrentPlayerTurn 
                             ? 'var(--color-button-hover)' 
                             : 'transparent'
                     }}
@@ -1035,14 +1221,14 @@ export default function Board() {
                 >
                     {cardLabels.map((label, index) => {
                         const category = label as "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong";
-                        const cards = player2.cards[category];
+                        const cards = player3.cards[category];
                         return (
                             <div
                                 key={index}
-                                onDrop={(e) => handleDrop(e, 2, category)}
+                                onDrop={(e) => handleDrop(e, 3, category)}
                                 onDragOver={handleDragOver}
-                                className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all ${
-                                    currentPlayer?.id === 2 && activeCardStack === "statement"
+                                className={`flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg border-2 border-dashed transition-all relative ${
+                                    currentPlayer?.id === 3 && activeCardStack === "statement"
                                         ? "border-button-hover"
                                         : "border-transparent"
                                 }`}
@@ -1052,20 +1238,14 @@ export default function Board() {
                                     alt={label} 
                                     className="h-auto object-contain w-full max-h-[400px] mb-2" 
                                 />
-                                {cards.length > 0 && (
-                                    <div className="mt-2 space-y-1 w-full px-2">
-                                        {cards.map((card, cardIndex) => (
-                                            <div key={cardIndex} className="rounded p-2 border border-button-hover text-xs">
-                                                <p className="text-neutral-800 line-clamp-2">{card.text}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                <div className="absolute top-0 left-0 right-0 flex items-center justify-center z-10" style={{ transform: 'translateY(-70%)' }}>
+                                    <PlayerCardStack cards={cards} reversed={true} playerId={3} category={category} onDragStart={handleCardDragStart} onDragEnd={handleCardDragEnd} />
+                                </div>
                             </div>
                         );
                     })}
                 </div>
             )}
         </div>
-	);
+    );
 }

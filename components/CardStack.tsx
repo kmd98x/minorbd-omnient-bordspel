@@ -50,6 +50,16 @@ export default function CardStack({ type, onCardDrawn }: CardStackProps) {
 		}
 	};
 
+	const handleSkip = () => {
+		// Skip the card - close and move to next player
+		if (currentCard) {
+			onCardDrawn(currentCard);
+			setIsOpen(false);
+			setCurrentCard(null);
+			setWasDragged(false);
+		}
+	};
+
 
 	return (
 		<>
@@ -105,6 +115,7 @@ export default function CardStack({ type, onCardDrawn }: CardStackProps) {
 									}, 100);
 								}}
 								onClick={handleCardClick}
+								onSkip={handleSkip}
 							/>
 						)}
 						{type === "compliment" && typeof currentCard !== "string" && "mainText" in currentCard && (

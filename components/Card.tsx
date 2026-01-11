@@ -13,9 +13,10 @@ interface cardProps {
     onDragStart?: (e: React.DragEvent) => void;
     onDragEnd?: (e?: React.DragEvent) => void;
     onClick?: () => void;
+    onSkip?: () => void;
 }
 
-export default function Card({type, cardTitle, cardStatement, draggable = false, onDragStart, onDragEnd, onClick}: cardProps) {
+export default function Card({type, cardTitle, cardStatement, draggable = false, onDragStart, onDragEnd, onClick, onSkip}: cardProps) {
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDragStart = (e: React.DragEvent) => {
@@ -44,6 +45,17 @@ export default function Card({type, cardTitle, cardStatement, draggable = false,
             onClick={handleClick}
         >
             <div className='bg-white rounded-lg flex flex-col gap-5 items-center justify-center relative py-4 px-4 w-full'>
+                {onSkip && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSkip();
+                        }}
+                        className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-button hover:bg-button-hover text-white px-6 py-2 rounded-lg transition-colors font-semibold text-base z-10"
+                    >
+                        Overslaan
+                    </button>
+                )}
                 <Logo className="scale-[1.8] h-[100px] mb-10" />
 
                 {cardTitle && (

@@ -24,6 +24,7 @@ type GameContextType = {
 	addPlayer: (name: string, icon: string) => void;
 	removePlayer: (playerId: number) => void;
 	addCardToPlayer: (playerId: number, card: StatementCard, category: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong") => void;
+	moveCardBetweenCategories: (playerId: number, card: StatementCard, fromCategory: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong", toCategory: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong") => void;
 	currentPlayerIndex: number;
 	setCurrentPlayerIndex: (index: number) => void;
 };
@@ -71,6 +72,48 @@ export function GameProvider({ children }: { children: ReactNode }) {
 		);
 	};
 
+	const moveCardBetweenCategories = (playerId: number, card: StatementCard, fromCategory: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong", toCategory: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong") => {
+		if (fromCategory === toCategory) return; // No need to move if same category
+		
+		setPlayers((prevPlayers) =>
+			prevPlayers.map((player) => {
+				if (player.id !== playerId) return player;
+				
+				// Find the index of the card in source category by comparing card properties
+				const sourceCardIndex = player.cards[fromCategory].findIndex(
+					c => c.text === card.text && c.hasQuestion === card.hasQuestion && c.bottomText === card.bottomText
+				);
+				
+				// If card not found, return player unchanged
+				if (sourceCardIndex === -1) {
+					console.warn("Card not found in source category");
+					return player;
+				}
+				
+				// Get the actual card object from the array (to ensure we have the exact reference)
+				const cardToMove = player.cards[fromCategory][sourceCardIndex];
+				
+				// Remove card from source category by index
+				const sourceCards = [
+					...player.cards[fromCategory].slice(0, sourceCardIndex),
+					...player.cards[fromCategory].slice(sourceCardIndex + 1)
+				];
+				
+				// Add card to target category
+				const targetCards = [...player.cards[toCategory], cardToMove];
+				
+				return {
+					...player,
+					cards: {
+						...player.cards,
+						[fromCategory]: sourceCards,
+						[toCategory]: targetCards,
+					},
+				};
+			})
+		);
+	};
+
 	const removePlayer = (playerId: number) => {
 		setPlayers((prevPlayers) => prevPlayers.filter((p) => p.id !== playerId));
 	};
@@ -84,6 +127,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 				addPlayer,
 				removePlayer,
 				addCardToPlayer,
+				moveCardBetweenCategories,
 				currentPlayerIndex,
 				setCurrentPlayerIndex,
 			}}
