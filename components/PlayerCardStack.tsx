@@ -8,10 +8,11 @@ interface PlayerCardStackProps {
     category?: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong";
     onDragStart?: (e: React.DragEvent, card: StatementCard, category: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong") => void;
     onDragEnd?: () => void;
+    onCardClick?: (card: StatementCard, category: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong") => void;
     scale?: number;
 }
 
-export default function PlayerCardStack({ cards, reversed = false, playerId, category, onDragStart, onDragEnd, scale }: PlayerCardStackProps) {
+export default function PlayerCardStack({ cards, reversed = false, playerId, category, onDragStart, onDragEnd, onCardClick, scale }: PlayerCardStackProps) {
     if (cards.length === 0) return null;
 
     // Maximum aantal kaarten om visueel te tonen (om performance te behouden)
@@ -70,6 +71,11 @@ export default function PlayerCardStack({ cards, reversed = false, playerId, cat
                                 onDragEnd={() => {
                                     if (onDragEnd) {
                                         onDragEnd();
+                                    }
+                                }}
+                                onClick={() => {
+                                    if (onCardClick && category) {
+                                        onCardClick(card, category);
                                     }
                                 }}
                             />

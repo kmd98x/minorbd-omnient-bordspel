@@ -961,7 +961,7 @@ export default function Board() {
                     {/* Player 2 - Right (inside) */}
                     {player2 && (
                         <div className="absolute right-0 top-1/2 -translate-y-1/2 rotate-90 origin-center">
-                            <h2 className="text-lg font-semibold text-center text-neutral-800 whitespace-nowrap flex items-center justify-center gap-2">
+                            <h2 className="text-lg font-semibold text-center text-neutral-800 whitespace-nowrap flex items-center justify-center gap-2 scale-[1.5]">
                                 <img
                                     src="/images/player-2.svg"
                                     alt="Speler 2"
@@ -975,7 +975,7 @@ export default function Board() {
                     {/* Player 3 - Bottom (inside) */}
                     {player3 && (
                         <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
-                            <h2 className="text-lg font-semibold text-center text-neutral-800 flex items-center justify-center gap-2">
+                            <h2 className="text-lg font-semibold text-center text-neutral-800 flex items-center justify-center gap-2 scale-[1.5]">
                                 <img
                                     src="/images/player-3.svg"
                                     alt="Speler 3"
@@ -989,7 +989,7 @@ export default function Board() {
                     {/* Player 4 - Left (inside) */}
                     {player4 && (
                         <div className="absolute -left-8 top-1/2 -translate-y-1/2 -rotate-90 origin-center">
-                            <h2 className="text-lg font-semibold text-center text-neutral-800 whitespace-nowrap flex items-center justify-center gap-2">
+                            <h2 className="text-lg font-semibold text-center text-neutral-800 whitespace-nowrap flex items-center justify-center gap-2 scale-[1.5]">
                                 <img
                                     src="/images/player-4.svg"
                                     alt="Speler 4"
