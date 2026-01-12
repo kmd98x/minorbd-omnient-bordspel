@@ -79,10 +79,6 @@ export default function Reflectie() {
         } else {
             // All players completed - show confetti!
             setShowConfetti(true);
-            // Redirect to results page after confetti
-            setTimeout(() => {
-                router.push('/resultaten');
-            }, 3000);
         }
     };
 
