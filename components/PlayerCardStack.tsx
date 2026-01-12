@@ -8,9 +8,10 @@ interface PlayerCardStackProps {
     category?: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong";
     onDragStart?: (e: React.DragEvent, card: StatementCard, category: "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong") => void;
     onDragEnd?: () => void;
+    scale?: number;
 }
 
-export default function PlayerCardStack({ cards, reversed = false, playerId, category, onDragStart, onDragEnd }: PlayerCardStackProps) {
+export default function PlayerCardStack({ cards, reversed = false, playerId, category, onDragStart, onDragEnd, scale }: PlayerCardStackProps) {
     if (cards.length === 0) return null;
 
     // Maximum aantal kaarten om visueel te tonen (om performance te behouden)
@@ -18,8 +19,12 @@ export default function PlayerCardStack({ cards, reversed = false, playerId, cat
     const visibleCards = cards.slice(0, maxVisibleCards);
     const remainingCount = Math.max(0, cards.length - maxVisibleCards);
 
+    // Calculate card scale
+    const cardScale = scale ?? 0.28; // Scale factor voor alle kaarten (default 0.28)
+    const containerHeight = cardScale > 0.28 ? `${180 * (cardScale / 0.28)}px` : '180px';
+    
     return (
-        <div className="relative flex items-center justify-center" style={{ height: '180px', width: '100%' }}>
+        <div className="relative flex items-center justify-center" style={{ height: containerHeight, width: '100%' }}>
             {visibleCards.map((card, index) => {
                 // De nieuwste kaart (laatste in array) komt bovenop
                 // Eerste kaart (index 0) ligt onderaan, laatste kaart (hoogste index) ligt bovenop
@@ -29,7 +34,6 @@ export default function PlayerCardStack({ cards, reversed = false, playerId, cat
                 const isNewestCard = index === visibleCards.length - 1; // Laatste kaart in array is de nieuwste
                 
                 // Grootte: alle kaarten even groot
-                const cardScale = 0.28; // Scale factor voor alle kaarten
                 const scaledWidth = 320 * cardScale; // Geschaalde breedte (ongeveer w-xs = 320px)
                 const marginLeft = -scaledWidth / 2; // Centreren
                 

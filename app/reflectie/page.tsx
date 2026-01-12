@@ -5,6 +5,7 @@ import { REFLECTION_QUESTIONS as questions} from "@/data/reflection-questions"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useGame } from "@/contexts/GameContext"
+import PlayerCardStack from "@/components/PlayerCardStack"
 
 type PlayerReflections = {
     [playerId: number]: {
@@ -70,8 +71,8 @@ export default function Reflectie() {
         if (currentReflectionPlayerIndex < players.length - 1) {
             setCurrentReflectionPlayerIndex(prev => prev + 1);
         } else {
-            // All players completed - redirect to resultaten
-            router.push('/resultaten');
+            // All players completed - could show completion message or redirect
+            // For now, just stay on the page (or you could redirect to a completion page)
         }
     };
 
@@ -103,6 +104,48 @@ export default function Reflectie() {
                 </div>
             )}
 
+            {/* Results section - Categories */}
+            {currentPlayer && (
+                <div className="mb-12">
+                    <h2 className="text-2xl font-bold mb-6 text-black text-center">
+                        Jouw kaarten per categorie
+                    </h2>
+                    <div className="flex items-center justify-between w-full">
+                        {(() => {
+                            const cardLabels = ["Be perfect", "Hurry up", "Be strong", "Pleaser", "Try hard"];
+                            const cardImages = [
+                                "/images/cards/be-perfect.svg",
+                                "/images/cards/hurry-up.svg",
+                                "/images/cards/be-strong.svg",
+                                "/images/cards/pleaser.svg",
+                                "/images/cards/try-hard.svg"
+                            ];
+                            
+                            return cardLabels.map((label, index) => {
+                                const category = label as "Be perfect" | "Try hard" | "Pleaser" | "Hurry up" | "Be strong";
+                                const cards = currentPlayer.cards[category];
+                                
+                                return (
+                                    <div
+                                        key={index}
+                                        className="flex-1 flex flex-col items-center justify-center mx-2 min-h-[235px] rounded-lg relative"
+                                    >
+                                        <img 
+                                            src={cardImages[index]} 
+                                            alt={label} 
+                                            className="h-auto object-contain w-full max-h-[400px] mb-2" 
+                                        />
+                                        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center z-10" style={{ transform: 'translateY(-10%)' }}>
+                                            <PlayerCardStack cards={cards} reversed={false} scale={0.45} />
+                                        </div>
+                                    </div>
+                                );
+                            });
+                        })()}
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-3 gap-10 w-full mb-3">
                 {questions.map((question, index) => (
                     <ReflectieColumn
@@ -129,7 +172,7 @@ export default function Reflectie() {
                             : 'bg-gray-400 cursor-not-allowed'
                     }`}
                 >
-                    {currentReflectionPlayerIndex < players.length - 1 ? 'Volgende speler' : 'Naar resultaten'}
+                    {currentReflectionPlayerIndex < players.length - 1 ? 'Volgende speler' : 'Klaar'}
                 </button>
             </div>
         </div>

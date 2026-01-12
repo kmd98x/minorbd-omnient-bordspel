@@ -510,6 +510,14 @@ export default function Board() {
 			return;
 		}
 		
+		// If only 1 player, always keep their turn (unless they're at finish, which is handled above)
+		if (players.length === 1) {
+			if (currentPlayerIndex !== 0) {
+				setCurrentPlayerIndex(0);
+			}
+			return;
+		}
+		
 		// Skip current player if at finish
 		const currentPlayer = players[currentPlayerIndex];
 		if (currentPlayer && currentPlayer.position >= FINISH_POSITION) {
@@ -659,24 +667,42 @@ export default function Board() {
 		
 		// If no card should be shown, move to next player immediately
 		if (!shouldShowCard) {
-			const currentPlayerIdx = players.findIndex(p => p.id === playerId);
-			if (currentPlayerIdx !== -1) {
-				// Find next player not at finish
-				let nextIndex: number | null = null;
-				for (let i = 0; i < players.length; i++) {
-					const index = (currentPlayerIdx + 1 + i) % players.length;
-					const player = players[index];
-					if (player.position < FINISH_POSITION) {
-						nextIndex = index;
-						break;
-					}
+			// Check if all players are at finish (use targetPosition for the player that just moved)
+			const allAtFinish = players.every(player => {
+				if (player.id === playerId) {
+					return targetPosition >= FINISH_POSITION;
 				}
-				
-				if (nextIndex !== null) {
-					setCurrentPlayerIndex(nextIndex);
-				} else {
-					// All players at finish
-					setShowFinishModal(true);
+				return player.position >= FINISH_POSITION;
+			});
+			if (allAtFinish) {
+				setShowFinishModal(true);
+				setAnimationComplete(null);
+				return;
+			}
+			
+			// If only 1 player, keep their turn (unless they're at finish, which is handled above)
+			if (players.length === 1) {
+				setCurrentPlayerIndex(0);
+			} else {
+				const currentPlayerIdx = players.findIndex(p => p.id === playerId);
+				if (currentPlayerIdx !== -1) {
+					// Find next player not at finish
+					let nextIndex: number | null = null;
+					for (let i = 0; i < players.length; i++) {
+						const index = (currentPlayerIdx + 1 + i) % players.length;
+						const player = players[index];
+						if (player.position < FINISH_POSITION) {
+							nextIndex = index;
+							break;
+						}
+					}
+					
+					if (nextIndex !== null) {
+						setCurrentPlayerIndex(nextIndex);
+					} else {
+						// All players at finish
+						setShowFinishModal(true);
+					}
 				}
 			}
 		}
@@ -688,6 +714,19 @@ export default function Board() {
 
 	// Move to next player after card is drawn
 	const handleCardDrawn = () => {
+		// Check if all players are at finish
+		const allAtFinish = players.every(player => player.position >= FINISH_POSITION);
+		if (allAtFinish) {
+			setShowFinishModal(true);
+			return;
+		}
+		
+		// If only 1 player, keep their turn (unless they're at finish, which is handled above)
+		if (players.length === 1) {
+			setCurrentPlayerIndex(0);
+			return;
+		}
+		
 		// Find current player and move to next
 		const currentPlayerIdx = players.findIndex(p => p.id === currentPlayer?.id);
 		if (currentPlayerIdx !== -1) {
@@ -1029,7 +1068,7 @@ export default function Board() {
                                 size={50} 
                                 onRoll={handleDiceRoll}
                                 onRollStart={handleDiceRollStart}
-                                disabled={!isCurrentPlayerTurn || isRolling || hasRolledThisTurn}
+                                disabled={!isCurrentPlayerTurn || isRolling}
                             />
                         </div>
                     </div>
